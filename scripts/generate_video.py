@@ -42,7 +42,7 @@ def generate_image_gemini(prompt: str, output_path: Path) -> bool:
         import requests
         import base64
         
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key={config.GEMINI_API_KEY}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-fast-generate-001:predict?key={config.GEMINI_API_KEY}"
         headers = {"Content-Type": "application/json"}
         
         full_prompt = (
