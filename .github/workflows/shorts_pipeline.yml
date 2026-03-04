@@ -1,0 +1,59 @@
+name: 🎬 Shorts Factory — 3x Daily Pipeline
+
+on:
+  schedule:
+    # 3 runs per day at YouTube peak engagement hours (UTC times)
+    # 6 AM CT = 12:00 UTC
+    - cron: '0 12 * * *'
+    # 12 PM CT = 18:00 UTC
+    - cron: '0 18 * * *'
+    # 6 PM CT = 00:00 UTC (next day)
+    - cron: '0 0 * * *'
+  workflow_dispatch:  # Allow manual trigger from GitHub UI
+
+jobs:
+  generate-short:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 📦 Install dependencies
+        run: |
+          pip install google-generativeai google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client feedparser pytrends gtts
+          sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: 🔑 Set up credentials
+        run: |
+          echo '${{ secrets.CLIENT_SECRET_JSON }}' > client_secret.json
+          echo '${{ secrets.YOUTUBE_TOKEN_JSON }}' > token.json
+
+      - name: 📁 Create output dirs
+        run: |
+          mkdir -p output/scripts output/audio output/video output/final
+
+      - name: 🎬 Run Pipeline
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python3 pipeline.py --count 1 --niche "$(python3 -c "import random; print(random.choice(['ai','sports','popculture','ai','sports','popculture','tech','cinema','finance','science','gaming','space','history']))")" --fallback --auto-upload --privacy public
+
+      - name: 📊 Show status
+        if: always()
+        run: |
+          python3 pipeline.py --log || true
+
+      - name: 💾 Save content log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: content-log-${{ github.run_number }}
+          path: output/content_log.json
+          retention-days: 30

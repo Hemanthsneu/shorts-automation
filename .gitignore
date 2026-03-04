@@ -1,0 +1,31 @@
+# Sensitive credentials
+.env
+token.json
+client_secret*.json
+*.pickle
+
+# Output files (too large for GitHub)
+output/
+*.mp4
+*.mp3
+*.wav
+*.jpg
+*.jpeg
+*.png
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.Python
+
+# OS
+.DS_Store
+Thumbs.db
+
+# n8n
+n8n/
+
+# Temp
+*.tmp
+*.log

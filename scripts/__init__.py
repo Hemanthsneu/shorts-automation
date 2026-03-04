@@ -1,0 +1,1 @@
+# Shorts Factory automation scripts

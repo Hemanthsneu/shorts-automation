@@ -1,0 +1,324 @@
+"""
+Stage 1: Generate short-form video scripts using Gemini API.
+Outputs JSON files with script, metadata, and Veo 3 prompts.
+
+Features:
+- REAL real-time trending data from Google Trends + RSS news
+- Gemini writes scripts based on verified current topics
+- Viral-optimized prompts with subscriber CTAs
+"""
+
+import json
+import random
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
+
+import google.generativeai as genai
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+import config
+
+# ── Niche → RSS feeds mapping ──
+NICHE_RSS_FEEDS = {
+    "tech": [
+        "https://news.google.com/rss/search?q=technology+trending&hl=en-US&gl=US&ceid=US:en",
+        "https://www.theverge.com/rss/index.xml",
+        "https://feeds.arstechnica.com/arstechnica/technology-lab",
+    ],
+    "ai": [
+        "https://news.google.com/rss/search?q=artificial+intelligence+news&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss/search?q=AI+breakthrough+OR+ChatGPT+OR+OpenAI+OR+Gemini+AI&hl=en-US&gl=US&ceid=US:en",
+    ],
+    "finance": [
+        "https://news.google.com/rss/search?q=stock+market+OR+cryptocurrency+OR+economy&hl=en-US&gl=US&ceid=US:en",
+    ],
+    "cinema": [
+        "https://news.google.com/rss/search?q=movies+box+office+OR+Hollywood+OR+Netflix+OR+streaming&hl=en-US&gl=US&ceid=US:en",
+    ],
+    "sports": [
+        "https://news.google.com/rss/search?q=sports+trending+OR+NFL+OR+NBA+OR+soccer+OR+cricket&hl=en-US&gl=US&ceid=US:en",
+    ],
+    "science": [
+        "https://news.google.com/rss/search?q=science+discovery+OR+space+OR+biology+breakthrough&hl=en-US&gl=US&ceid=US:en",
+    ],
+    "gaming": [
+        "https://news.google.com/rss/search?q=gaming+news+OR+PlayStation+OR+Xbox+OR+Nintendo&hl=en-US&gl=US&ceid=US:en",
+    ],
+    "history": [
+        "https://news.google.com/rss/search?q=history+discovery+OR+archaeology+OR+ancient&hl=en-US&gl=US&ceid=US:en",
+    ],
+    "space": [
+        "https://news.google.com/rss/search?q=NASA+OR+SpaceX+OR+space+exploration+OR+astronomy&hl=en-US&gl=US&ceid=US:en",
+    ],
+    "popculture": [
+        "https://news.google.com/rss/search?q=viral+OR+celebrity+OR+pop+culture+OR+trending&hl=en-US&gl=US&ceid=US:en",
+    ],
+}
+
+
+def fetch_rss_headlines(niche: str, max_headlines: int = 15) -> list[str]:
+    """Fetch real headlines from RSS news feeds for the given niche."""
+    import feedparser
+
+    feeds = NICHE_RSS_FEEDS.get(niche, [
+        f"https://news.google.com/rss/search?q={niche}+trending&hl=en-US&gl=US&ceid=US:en",
+    ])
+
+    headlines = []
+    for feed_url in feeds:
+        try:
+            feed = feedparser.parse(feed_url)
+            for entry in feed.entries[:10]:
+                title = entry.get("title", "").strip()
+                if title and len(title) > 10:
+                    headlines.append(title)
+        except Exception:
+            continue
+
+    # Deduplicate and shuffle
+    headlines = list(set(headlines))
+    random.shuffle(headlines)
+    return headlines[:max_headlines]
+
+
+def fetch_google_trends(niche: str) -> list[str]:
+    """Fetch real-time trending searches from Google Trends."""
+    try:
+        from pytrends.request import TrendReq
+
+        pytrends = TrendReq(hl='en-US', tz=360)
+
+        # Get today's trending searches
+        trending = pytrends.trending_searches(pn='united_states')
+        trends_list = trending[0].tolist()[:10]
+
+        return [t for t in trends_list if isinstance(t, str) and len(t) > 2]
+    except Exception as e:
+        print(f"    ⚠️  Google Trends fetch failed: {e}")
+        return []
+
+
+def discover_trending_topics(niche: str, count: int) -> list[str]:
+    """Pull REAL trending data from Google Trends + RSS, then use Gemini
+    controversy scoring to pick only the most viral-worthy topics (7+/10)."""
+    print(f"  🔍 Fetching REAL trending data for '{niche}'...")
+
+    # 1. Get real headlines from RSS (more headlines = better selection)
+    rss_headlines = fetch_rss_headlines(niche, max_headlines=20)
+    print(f"    📰 Found {len(rss_headlines)} real news headlines")
+
+    # 2. Get Google Trends
+    google_trends = fetch_google_trends(niche)
+    print(f"    📈 Found {len(google_trends)} Google trending searches")
+
+    all_real_data = rss_headlines + google_trends
+
+    if not all_real_data:
+        print(f"  ⚠️  No real-time data found, falling back to curated pool")
+        return None
+
+    # 3. CONTROVERSY SCORING — Rate each headline for viral potential
+    genai.configure(api_key=config.GEMINI_API_KEY)
+    model = genai.GenerativeModel("gemini-2.5-flash")
+
+    today = datetime.now().strftime("%B %d, %Y")
+
+    prompt = f"""Today is {today}. You are a YouTube Shorts viral strategist.
+
+Score each headline below from 1-10 for VIRAL POTENTIAL as a 60-second YouTube Short.
+
+SCORING CRITERIA (what gets 8-10):
+- Controversy, scandal, or exposé (e.g. "Company CAUGHT doing X")
+- Celebrity/public figure drama or secrets revealed
+- Shocking statistics or "you won't believe" revelations  
+- Breaking news that affects millions of people
+- Stories that trigger strong emotions (outrage, shock, fear, amazement)
+- Topics people are actively debating RIGHT NOW
+
+WHAT SCORES LOW (1-4):
+- Generic corporate news, quarterly earnings, stock movements
+- Boring policy updates, routine announcements
+- Stories without a clear emotional hook
+- Old news or topics no one is actively discussing
+
+HEADLINES TO SCORE:
+{chr(10).join(f'{i+1}. {h}' for i, h in enumerate(all_real_data))}
+
+Return ONLY a JSON array of objects. No markdown, no code fences.
+Format: [{{"headline": "exact headline text", "score": 8, "angle": "the viral angle in 10 words"}}]
+
+Return ALL headlines with their scores. I will filter by score >= 7."""
+
+    try:
+        print(f"  🔥 Running controversy scoring on {len(all_real_data)} headlines...")
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1]
+        if text.endswith("```"):
+            text = text.rsplit("```", 1)[0]
+        text = text.strip()
+
+        scored = json.loads(text)
+        if isinstance(scored, list):
+            # Filter for high-scoring headlines (7+)
+            hot_topics = [s for s in scored if isinstance(s, dict) and s.get("score", 0) >= 7]
+            hot_topics.sort(key=lambda x: x.get("score", 0), reverse=True)
+
+            if hot_topics:
+                picked = hot_topics[:count]
+                for p in picked:
+                    print(f"    🔥 [{p.get('score', '?')}/10] {p.get('headline', '?')[:60]}...")
+                    print(f"       Angle: {p.get('angle', 'N/A')}")
+                return [p["headline"] for p in picked]
+            else:
+                print(f"  ⚠️  No headlines scored 7+, picking top scored anyway")
+                scored.sort(key=lambda x: x.get("score", 0), reverse=True)
+                picked = scored[:count]
+                for p in picked:
+                    print(f"    📊 [{p.get('score', '?')}/10] {p.get('headline', '?')[:60]}...")
+                return [p["headline"] for p in picked]
+    except Exception as e:
+        print(f"  ⚠️  Controversy scoring failed: {e}")
+
+    # Fallback: just return raw headlines
+    return random.sample(all_real_data, min(count, len(all_real_data)))
+
+
+def generate_scripts(niche: str, count: int, batch_id: str) -> list[dict]:
+    """Generate `count` scripts for the given niche. Returns list of script dicts."""
+    genai.configure(api_key=config.GEMINI_API_KEY)
+    model = genai.GenerativeModel("gemini-2.5-flash")
+
+    niche_cfg = config.NICHE_CONFIG[niche]
+
+    # Try to discover trending topics first
+    trending_topics = discover_trending_topics(niche, count)
+    if trending_topics:
+        topics = trending_topics
+        trending_source = "real_time_trending"
+    else:
+        # Fallback to curated pool
+        topics = random.sample(niche_cfg["topics_pool"], min(count, len(niche_cfg["topics_pool"])))
+        trending_source = "curated_pool"
+
+    today = datetime.now().strftime("%B %d, %Y")
+
+    prompt = f"""{niche_cfg['system_prompt']}
+
+Today is {today}. Generate exactly {count} YouTube Shorts scripts about topics that are CURRENTLY trending.
+Return ONLY valid JSON — no markdown, no code fences.
+
+VIRAL OPTIMIZATION RULES:
+- Hook MUST be a shocking one-liner that makes viewers STOP scrolling (pattern interrupts work best)
+- Use curiosity gaps: tease information, then deliver it in the body
+- Include "most people don't know this" or "here's what they don't tell you" framing
+- Every sentence must earn its place — ZERO filler words
+- Use power words: "secretly", "shocking", "insane", "illegal", "banned", "exposed"
+- Include a natural subscriber CTA woven into the outro (not forced)
+- End with an OPEN LOOP that makes viewers want to see the next video
+- Title must have a number, a power word, or a question mark — ideally all three
+- The script MUST reference current/recent events — NO outdated information
+
+Return a JSON array where each element has:
+{{
+  "id": "S001",
+  "title": "catchy title under 70 chars — must have number OR power word — optimized for CTR",
+  "hook": "first 2-3 seconds, the scroll-stopper, 10-15 words max, shocking or controversial",
+  "body": "main content, 130-160 words, punchy short sentences, one mind-blowing idea per sentence, build tension throughout",
+  "outro": "final line — open loop that hints at a bigger story OR natural subscribe CTA, 10-15 words",
+  "description": "SEO-blitz description: first line = primary keyword phrase. Then 2-line summary. Then 'Subscribe for daily mind-blowing facts!' Then 15+ hashtags mixing broad (#Shorts #Viral #Trending) and niche-specific tags",
+  "tags": ["#Shorts", "#Viral", "#Trending", "#MustWatch", "#MindBlown", "#Exposed", "#DidYouKnow", "#Facts"] + {json.dumps(niche_cfg['hashtags'])},
+  "pinned_comment": "engaging question that sparks debate in comments, e.g. 'What do YOU think about this? Drop your take below 👇'",
+  "visual_cues": [
+    {{"timestamp": "0-3s", "description": "dramatic visual for the hook — sets the mood instantly"}},
+    {{"timestamp": "3-20s", "description": "visual supporting the first revelation"}},
+    {{"timestamp": "20-40s", "description": "visual for the main mind-blowing point"}},
+    {{"timestamp": "40-55s", "description": "visual building to the climax"}},
+    {{"timestamp": "55-60s", "description": "outro visual — clean, branded feel"}}
+  ],
+  "veo3_prompts": [
+    "complete Veo 3 prompt for clip 1 — cinematic, 9:16, 4K, smooth camera movement, dramatic lighting, photorealistic",
+    "complete Veo 3 prompt for clip 2 — different angle or scene, maintains visual continuity",
+    "complete Veo 3 prompt for clip 3 — most dramatic visual in the video",
+    "complete Veo 3 prompt for clip 4 — clean, professional outro feel"
+  ]
+}}
+
+Topics to cover (one script per topic — make these VIRAL):
+{chr(10).join(f'{i+1}. {t}' for i, t in enumerate(topics))}
+
+Visual style direction: {niche_cfg['visual_style']}
+
+CRITICAL:
+- Total spoken words per script: 140-170 (equals 55-65 seconds)
+- Every script must feel like a MUST-WATCH
+- Scripts must be about CURRENT events, not old news
+- Return ONLY the JSON array, nothing else
+"""
+
+    print(f"  ⏳ Calling Gemini for {count} viral scripts...")
+    response = model.generate_content(prompt)
+    text = response.text.strip()
+
+    # Clean up common Gemini response issues
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1]
+    if text.endswith("```"):
+        text = text.rsplit("```", 1)[0]
+    text = text.strip()
+
+    scripts = json.loads(text)
+
+    # Ensure scripts is a list of dicts
+    if isinstance(scripts, dict):
+        scripts = [scripts]
+    # Filter out any non-dict entries (Gemini sometimes returns strings)
+    scripts = [s for s in scripts if isinstance(s, dict)]
+    if not scripts:
+        raise ValueError("Gemini returned no valid script objects")
+
+    # Assign proper IDs and save individually
+    results = []
+    for i, script in enumerate(scripts):
+        script["id"] = f"{batch_id}_{i+1:03d}"
+        script["niche"] = niche
+        script["channel"] = niche_cfg["channel_name"]
+        script["generated_at"] = datetime.now().isoformat()
+        script["full_script"] = f"{script['hook']} {script['body']} {script['outro']}"
+        script["trending_source"] = trending_source
+
+        # Word count validation
+        word_count = len(script["full_script"].split())
+        script["word_count"] = word_count
+        if word_count < 100 or word_count > 200:
+            print(f"  ⚠️  Script {script['id']} has {word_count} words (target: 140-170)")
+
+        # Save individual script JSON
+        out_path = config.SCRIPTS_DIR / f"{script['id']}.json"
+        out_path.write_text(json.dumps(script, indent=2))
+        results.append(script)
+        source_label = "🔥 LIVE trending" if trending_source == "real_time_trending" else "📋 curated"
+        print(f"  ✅ Script {script['id']}: \"{script['title']}\" ({word_count} words) [{source_label}]")
+
+    return results
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--niche", default=config.DEFAULT_NICHE)
+    parser.add_argument("--count", type=int, default=config.SHORTS_PER_RUN)
+    parser.add_argument("--batch-id", default=datetime.now().strftime("B%Y%m%d"))
+    args = parser.parse_args()
+
+    print(f"\n🎬 Stage 1: Generating {args.count} viral scripts for '{args.niche}' niche\n")
+    scripts = generate_scripts(args.niche, args.count, args.batch_id)
+    print(f"\n✅ Generated {len(scripts)} scripts → {config.SCRIPTS_DIR}/\n")
+    return scripts
+
+
+if __name__ == "__main__":
+    main()
