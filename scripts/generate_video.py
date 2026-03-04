@@ -37,32 +37,41 @@ BURNS_EFFECTS = [
 
 
 def generate_image_gemini(prompt: str, output_path: Path) -> bool:
-    """Generate a single image using Gemini's image generation model."""
+    """Generate a single image using Gemini's image generation model via REST API."""
     try:
-        from google import genai
-
-        client = genai.Client(api_key=config.GEMINI_API_KEY)
-
+        import requests
+        import base64
+        
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key={config.GEMINI_API_KEY}"
+        headers = {"Content-Type": "application/json"}
+        
         full_prompt = (
             f"Generate a stunning, cinematic image for a YouTube Short: {prompt}. "
             f"Vertical 9:16 aspect ratio, photorealistic, dramatic lighting, "
             f"vivid colors, high detail, 4K quality."
         )
-
-        response = client.models.generate_content(
-            model="gemini-2.0-flash-exp-image-generation",
-            contents=full_prompt,
-            config=genai.types.GenerateContentConfig(
-                response_modalities=["TEXT", "IMAGE"]
-            ),
-        )
-
-        # Extract image from response
-        for part in response.candidates[0].content.parts:
-            if part.inline_data and part.inline_data.data:
-                output_path.write_bytes(part.inline_data.data)
-                return True
-
+        
+        payload = {
+            "instances": [{"prompt": full_prompt}],
+            "parameters": {
+                "sampleCount": 1,
+                "aspectRatio": "9:16",
+                "outputOptions": {"mimeType": "image/jpeg"}
+            }
+        }
+        
+        response = requests.post(url, headers=headers, json=payload)
+        if response.status_code == 200:
+            data = response.json()
+            if "predictions" in data and len(data["predictions"]) > 0:
+                b64_image = data["predictions"][0].get("bytesBase64Encoded")
+                if b64_image:
+                    with open(output_path, "wb") as f:
+                        f.write(base64.b64decode(b64_image))
+                    return True
+        else:
+            print(f"    ❌ API Error: {response.status_code} - {response.text}")
+            
         return False
 
     except Exception as e:
