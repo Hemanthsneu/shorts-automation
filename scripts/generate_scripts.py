@@ -122,90 +122,81 @@ def fetch_rss_headlines(niche: str, max_headlines: int = 20) -> list[str]:
     return headlines[:max_headlines]
 
 
-def fetch_youtube_trending(niche: str, max_results: int = 10) -> list[str]:
-    """Fetch currently trending YouTube videos for the niche category."""
-    import requests
+def fetch_google_trends_rss(max_results: int = 15) -> list[str]:
+    """Fetch currently trending searches from Google Trends RSS (free, no API key)."""
+    import feedparser
     
     try:
-        # Use YouTube Data API v3 — key is same as GEMINI_API_KEY for Google Cloud
-        api_key = config.GEMINI_API_KEY
-        category_id = NICHE_YT_CATEGORIES.get(niche, "0")
+        url = "https://trends.google.com/trending/rss?geo=US"
+        feed = feedparser.parse(url)
         
-        url = "https://www.googleapis.com/youtube/v3/videos"
-        params = {
-            "part": "snippet,statistics",
-            "chart": "mostPopular",
-            "regionCode": "US",
-            "videoCategoryId": category_id,
-            "maxResults": max_results,
-            "key": api_key,
-        }
-        
-        r = requests.get(url, params=params)
-        if r.status_code == 200:
-            data = r.json()
-            titles = []
-            for item in data.get("items", []):
-                title = item.get("snippet", {}).get("channelTitle", "") + ": " + item.get("snippet", {}).get("title", "")
-                view_count = int(item.get("statistics", {}).get("viewCount", "0"))
-                # Only include videos with significant traction
-                if view_count > 50000:
-                    titles.append(item.get("snippet", {}).get("title", ""))
-            return titles
-        else:
-            print(f"    ⚠️  YouTube API: {r.status_code}")
-            return []
+        topics = []
+        for entry in feed.entries[:max_results]:
+            title = entry.get("title", "").strip()
+            if title and len(title) > 2:
+                topics.append(title)
+        return topics
     except Exception as e:
-        print(f"    ⚠️  YouTube Trending fetch failed: {e}")
+        print(f"    ⚠️  Google Trends RSS failed: {e}")
         return []
 
 
-def fetch_reddit_hot(niche: str, max_posts: int = 10) -> list[str]:
-    """Fetch hot posts from relevant Reddit subreddits."""
-    import requests
-    
-    subreddits = NICHE_SUBREDDITS.get(niche, [niche])
-    headlines = []
-    
-    headers = {"User-Agent": "ShortsFactory/1.0"}
-    
-    for sub in subreddits[:2]:  # Limit to 2 subreddits to avoid rate limits
-        try:
-            url = f"https://www.reddit.com/r/{sub}/hot.json?limit=10"
-            r = requests.get(url, headers=headers, timeout=5)
-            if r.status_code == 200:
-                data = r.json()
-                for post in data.get("data", {}).get("children", []):
-                    post_data = post.get("data", {})
-                    title = post_data.get("title", "")
-                    score = post_data.get("score", 0)
-                    # Only include posts with good engagement
-                    if score > 100 and len(title) > 15 and not post_data.get("stickied"):
-                        headlines.append(title)
-        except Exception:
-            continue
-    
-    return headlines[:max_posts]
+def fetch_gemini_trending(niche: str, count: int = 10) -> list[str]:
+    """Use Gemini to identify what's currently trending and viral in the niche.
+    This leverages Gemini's real-time knowledge to suggest the hottest topics."""
+    try:
+        genai.configure(api_key=config.GEMINI_API_KEY)
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        
+        today = datetime.now().strftime("%B %d, %Y")
+        
+        prompt = f"""Today is {today}. What are the TOP {count} most VIRAL and CONTROVERSIAL topics 
+trending RIGHT NOW in the '{niche}' space that would make explosive YouTube Shorts?
+
+Focus on:
+- Specific named people, companies, or events in the news TODAY
+- Scandals, controversies, or shocking revelations  
+- Topics that people are actively debating and arguing about
+- Breaking news that just happened in the last 24-48 hours
+
+Return ONLY a JSON array of headline strings. No markdown, no explanation.
+Example: ["Elon Musk caught doing X", "NBA star accused of Y"]"""
+        
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1]
+        if text.endswith("```"):
+            text = text.rsplit("```", 1)[0]
+        text = text.strip()
+        
+        import json
+        topics = json.loads(text)
+        if isinstance(topics, list):
+            return [t for t in topics if isinstance(t, str) and len(t) > 10][:count]
+    except Exception as e:
+        print(f"    ⚠️  Gemini trending analysis failed: {e}")
+    return []
 
 
 def discover_trending_topics(niche: str, count: int) -> list[str]:
-    """Pull REAL trending data from YouTube Trending + Reddit + RSS, then use Gemini
+    """Pull REAL trending data from Google Trends + Gemini AI + RSS, then use Gemini
     controversy scoring to pick only the most viral-worthy topics (8+/10)."""
     print(f"  🔍 Fetching REAL trending data for '{niche}'...")
 
-    # 1. YouTube Trending — what's actually going viral on YouTube RIGHT NOW
-    yt_trending = fetch_youtube_trending(niche, max_results=10)
-    print(f"    🎬 Found {len(yt_trending)} YouTube trending videos")
+    # 1. Google Trends RSS — what people are ACTUALLY searching for right now
+    google_trends = fetch_google_trends_rss(max_results=15)
+    print(f"    📈 Found {len(google_trends)} Google Trends topics")
 
-    # 2. Reddit Hot — engagement-validated topics people are actively discussing
-    reddit_hot = fetch_reddit_hot(niche, max_posts=10)
-    print(f"    🔥 Found {len(reddit_hot)} Reddit hot posts")
+    # 2. Gemini AI Trending — AI-identified viral topics in the niche
+    gemini_trending = fetch_gemini_trending(niche, count=10)
+    print(f"    🤖 Found {len(gemini_trending)} Gemini AI trending topics")
 
     # 3. RSS News — breaking news from last 24 hours
     rss_headlines = fetch_rss_headlines(niche, max_headlines=20)
     print(f"    📰 Found {len(rss_headlines)} news headlines")
 
-    all_real_data = yt_trending + reddit_hot + rss_headlines
+    all_real_data = google_trends + gemini_trending + rss_headlines
 
     if not all_real_data:
         print(f"  ⚠️  No real-time data found, falling back to curated pool")
