@@ -36,46 +36,100 @@ BURNS_EFFECTS = [
 ]
 
 
-def generate_image_gemini(prompt: str, output_path: Path) -> bool:
-    """Generate a single image using Gemini's image generation model via REST API."""
-    try:
-        import requests
-        import base64
-        
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-fast-generate-001:predict?key={config.GEMINI_API_KEY}"
-        headers = {"Content-Type": "application/json"}
-        
-        full_prompt = (
-            f"Generate a stunning, cinematic image for a YouTube Short: {prompt}. "
-            f"Vertical 9:16 aspect ratio, photorealistic, dramatic lighting, "
-            f"vivid colors, high detail, 4K quality."
-        )
-        
-        payload = {
-            "instances": [{"prompt": full_prompt}],
-            "parameters": {
-                "sampleCount": 1,
-                "aspectRatio": "9:16",
-                "outputOptions": {"mimeType": "image/jpeg"}
-            }
+def _generate_image_gemini_flash(prompt: str, output_path: Path) -> bool:
+    """Primary: Use Gemini 2.0 Flash for image generation (best compositional quality)."""
+    import requests
+    import base64
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key={config.GEMINI_API_KEY}"
+    
+    full_prompt = (
+        f"Generate a stunning, cinematic image for a YouTube Short: {prompt}. "
+        f"Vertical 9:16 aspect ratio, photorealistic, dramatic lighting, "
+        f"vivid colors, ultra high detail, 4K quality. No text or watermarks."
+    )
+    
+    payload = {
+        "contents": [{"parts": [{"text": full_prompt}]}],
+        "generationConfig": {
+            "responseModalities": ["TEXT", "IMAGE"]
         }
-        
-        response = requests.post(url, headers=headers, json=payload)
-        if response.status_code == 200:
-            data = response.json()
-            if "predictions" in data and len(data["predictions"]) > 0:
-                b64_image = data["predictions"][0].get("bytesBase64Encoded")
-                if b64_image:
-                    with open(output_path, "wb") as f:
-                        f.write(base64.b64decode(b64_image))
-                    return True
-        else:
-            print(f"    ❌ API Error: {response.status_code} - {response.text}")
-            
-        return False
+    }
+    
+    response = requests.post(url, json=payload, headers={"Content-Type": "application/json"})
+    if response.status_code == 200:
+        data = response.json()
+        candidates = data.get("candidates", [])
+        if candidates:
+            parts = candidates[0].get("content", {}).get("parts", [])
+            for p in parts:
+                if "inlineData" in p:
+                    img_data = p["inlineData"].get("data", "")
+                    if img_data:
+                        with open(output_path, "wb") as f:
+                            f.write(base64.b64decode(img_data))
+                        return True
+    elif response.status_code != 503:
+        print(f"    ⚠️  Gemini Flash: {response.status_code}")
+    return False
 
+
+def _generate_image_imagen4(prompt: str, output_path: Path) -> bool:
+    """Fallback: Use Imagen 4.0 Fast for image generation."""
+    import requests
+    import base64
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-fast-generate-001:predict?key={config.GEMINI_API_KEY}"
+    
+    full_prompt = (
+        f"Generate a stunning, cinematic image for a YouTube Short: {prompt}. "
+        f"Vertical 9:16 aspect ratio, photorealistic, dramatic lighting, "
+        f"vivid colors, high detail, 4K quality."
+    )
+    
+    payload = {
+        "instances": [{"prompt": full_prompt}],
+        "parameters": {
+            "sampleCount": 1,
+            "aspectRatio": "9:16",
+            "outputOptions": {"mimeType": "image/jpeg"}
+        }
+    }
+    
+    response = requests.post(url, json=payload, headers={"Content-Type": "application/json"})
+    if response.status_code == 200:
+        data = response.json()
+        if "predictions" in data and len(data["predictions"]) > 0:
+            b64_image = data["predictions"][0].get("bytesBase64Encoded")
+            if b64_image:
+                with open(output_path, "wb") as f:
+                    f.write(base64.b64decode(b64_image))
+                return True
+    else:
+        print(f"    ⚠️  Imagen 4: {response.status_code}")
+    return False
+
+
+def generate_image_gemini(prompt: str, output_path: Path) -> bool:
+    """Generate image using dual-engine: Gemini Flash (primary) → Imagen 4 (fallback)."""
+    try:
+        # Try Gemini 2.0 Flash first (better compositional understanding)
+        if _generate_image_gemini_flash(prompt, output_path):
+            return True
+        
+        print("    🔄 Gemini Flash failed, trying Imagen 4...")
+        # Fallback to Imagen 4.0 Fast
+        if _generate_image_imagen4(prompt, output_path):
+            return True
+        
+        # One more retry on Gemini Flash (handles transient 503s)
+        import time
+        time.sleep(2)
+        print("    🔄 Retrying Gemini Flash...")
+        return _generate_image_gemini_flash(prompt, output_path)
+        
     except Exception as e:
-        print(f"    ⚠️  Image generation error: {e}")
+        print(f"    ❌ Image generation error: {e}")
         return False
 
 
