@@ -2,15 +2,15 @@ name: 🎬 Shorts Factory — 3x Daily Pipeline
 
 on:
   schedule:
-    # 3 runs per day at YouTube peak engagement hours (UTC times)
-    # 6 AM CT = 12:00 UTC
-    - cron: '0 12 * * *'
-    # 12 PM CT = 18:00 UTC
+    # 4 runs per day at YouTube's PROVEN peak engagement hours (UTC times)
+    # 7 AM CT = 13:00 UTC — morning commuters + East Coast office workers
+    - cron: '0 13 * * *'
+    # 12 PM CT = 18:00 UTC — lunch break scrolling peak
     - cron: '0 18 * * *'
-    # 6 PM CT = 00:00 UTC (next day)
-    - cron: '0 0 * * *'
-    # 7 PM CT = 01:00 UTC (test trigger)
-    - cron: '0 1 * * *'
+    # 5 PM CT = 23:00 UTC — after work/school prime time
+    - cron: '0 23 * * *'
+    # 9 PM CT = 03:00 UTC — late night scrolling + West Coast prime time
+    - cron: '0 3 * * *'
   workflow_dispatch:  # Allow manual trigger from GitHub UI
 
 jobs:

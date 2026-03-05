@@ -211,51 +211,65 @@ def generate_scripts(niche: str, count: int, batch_id: str) -> list[dict]:
 Today is {today}. Generate exactly {count} YouTube Shorts scripts about topics that are CURRENTLY trending.
 Return ONLY valid JSON — no markdown, no code fences.
 
-VIRAL OPTIMIZATION RULES:
-- Hook MUST be a shocking one-liner that makes viewers STOP scrolling (pattern interrupts work best)
-- Use curiosity gaps: tease information, then deliver it in the body
-- Include "most people don't know this" or "here's what they don't tell you" framing
-- Every sentence must earn its place — ZERO filler words
-- Use power words: "secretly", "shocking", "insane", "illegal", "banned", "exposed"
-- Include a natural subscriber CTA woven into the outro (not forced)
-- End with an OPEN LOOP that makes viewers want to see the next video
-- Title must have a number, a power word, or a question mark — ideally all three
-- The script MUST reference current/recent events — NO outdated information
+WHAT MAKES A SHORT GO VIRAL (follow this EXACTLY):
+Our top performing video "OpenAI's SHOCKING 'Sky' Voice Scandal EXPOSED" hit 2,000+ views because:
+1. It NAMED a specific company/person (OpenAI, Scarlett Johansson)
+2. It had an EXPOSE angle ("caught", "exposed", "scandal")
+3. The hook was a SPECIFIC claim, not generic clickbait
+4. It felt like BREAKING NEWS the viewer hadn't heard yet
+5. It created OUTRAGE — viewers felt compelled to comment
+
+YOU MUST FOLLOW THIS FORMULA:
+- ALWAYS name specific people, companies, or organizations in the title
+- Frame as an EXPOSE: someone got caught, a secret leaked, the truth came out
+- The hook must make a SPECIFIC shocking claim (never vague)
+- Body must include REAL details: dates, numbers, quotes, specifics
+- Create a VILLAIN vs VICTIM narrative — viewers love taking sides
+- End with an UNRESOLVED question that forces viewers to comment
+- The title MUST read like a news alert someone would screenshot and share
+
+TITLE FORMULAS THAT WORK (pick one):
+- "[Famous Name] Just Got CAUGHT Doing [Shocking Thing]" 
+- "[Company] Has Been LYING About [Topic]... Here's Proof"
+- "The [Industry] Secret They Don't Want You to Know"
+- "[Breaking Event]: What Nobody Is Telling You"
+- "[Person] EXPOSED: The [Number] Things They're Hiding"
 
 Return a JSON array where each element has:
 {{
   "id": "S001",
-  "title": "catchy title under 70 chars — must have number OR power word — optimized for CTR",
-  "hook": "first 2-3 seconds, the scroll-stopper, 10-15 words max, shocking or controversial",
-  "body": "main content, 130-160 words, punchy short sentences, one mind-blowing idea per sentence, build tension throughout",
-  "outro": "final line — open loop that hints at a bigger story OR natural subscribe CTA, 10-15 words",
-  "description": "SEO-blitz description: first line = primary keyword phrase. Then 2-line summary. Then 'Subscribe for daily mind-blowing facts!' Then 15+ hashtags mixing broad (#Shorts #Viral #Trending) and niche-specific tags",
-  "tags": ["#Shorts", "#Viral", "#Trending", "#MustWatch", "#MindBlown", "#Exposed", "#DidYouKnow", "#Facts"] + {json.dumps(niche_cfg['hashtags'])},
-  "pinned_comment": "engaging question that sparks debate in comments, e.g. 'What do YOU think about this? Drop your take below 👇'",
+  "title": "MUST name a specific person/company + use EXPOSED/CAUGHT/SHOCKING — under 70 chars",
+  "hook": "first 2-3 sec, a SPECIFIC shocking claim with a named entity, 10-15 words, must trigger outrage or disbelief",
+  "body": "main content, 130-160 words. Start with context (who/what). Then the revelation (what happened). Then WHY it matters (how it affects viewers). Use specific numbers, dates, and names. Short punchy sentences. Build tension to a climax.",
+  "outro": "end with a provocative question or unresolved cliffhanger that FORCES comments, 10-15 words",
+  "description": "First line: exact topic keyword phrase. Second line: 1-sentence summary. Third line: 'Follow for daily exposés and breaking stories!' Then 15+ hashtags: #Shorts #Viral #Trending #Exposed #Breaking #[TopicSpecific] {' '.join(niche_cfg['hashtags'])}",
+  "tags": ["#Shorts", "#Viral", "#Trending", "#MustWatch", "#Exposed", "#Breaking", "#DidYouKnow", "#Facts"] + {json.dumps(niche_cfg['hashtags'])},
+  "pinned_comment": "a POLARIZING question that forces people to pick a side, e.g. 'Do you think [person] should be held accountable? YES or NO 👇'",
   "visual_cues": [
-    {{"timestamp": "0-3s", "description": "dramatic visual for the hook — sets the mood instantly"}},
-    {{"timestamp": "3-20s", "description": "visual supporting the first revelation"}},
-    {{"timestamp": "20-40s", "description": "visual for the main mind-blowing point"}},
-    {{"timestamp": "40-55s", "description": "visual building to the climax"}},
-    {{"timestamp": "55-60s", "description": "outro visual — clean, branded feel"}}
+    {{"timestamp": "0-3s", "description": "dramatic close-up or headline-style visual — immediately signals THIS IS IMPORTANT"}},
+    {{"timestamp": "3-20s", "description": "visual of the person/company/event being discussed — establishes WHO"}},
+    {{"timestamp": "20-40s", "description": "visual showing the evidence/revelation — the PROOF"}},
+    {{"timestamp": "40-55s", "description": "dramatic visual showing impact/consequences — WHY IT MATTERS"}}
   ],
   "veo3_prompts": [
-    "complete Veo 3 prompt for clip 1 — cinematic, 9:16, 4K, smooth camera movement, dramatic lighting, photorealistic",
-    "complete Veo 3 prompt for clip 2 — different angle or scene, maintains visual continuity",
-    "complete Veo 3 prompt for clip 3 — most dramatic visual in the video",
-    "complete Veo 3 prompt for clip 4 — clean, professional outro feel"
+    "cinematic 9:16 dramatic close-up related to the topic, photorealistic, breaking-news energy, red/dark tones",
+    "cinematic 9:16 wide shot establishing the scene/person, photorealistic, dramatic lighting",
+    "cinematic 9:16 the key evidence or revelation moment, photorealistic, intense atmosphere",
+    "cinematic 9:16 dramatic conclusion shot, photorealistic, somber or powerful mood"
   ]
 }}
 
-Topics to cover (one script per topic — make these VIRAL):
+Topics to cover (one script per topic — make these VIRAL EXPOSÉS):
 {chr(10).join(f'{i+1}. {t}' for i, t in enumerate(topics))}
 
 Visual style direction: {niche_cfg['visual_style']}
 
-CRITICAL:
+CRITICAL RULES:
 - Total spoken words per script: 140-170 (equals 55-65 seconds)
-- Every script must feel like a MUST-WATCH
-- Scripts must be about CURRENT events, not old news
+- EVERY title MUST name a specific person, company, or organization
+- NEVER use generic titles like "3 Shocking Facts" — always tie to a NAMED entity
+- Scripts MUST reference CURRENT events happening TODAY — NO old news
+- The viewer should feel like they're getting INSIDER information
 - Return ONLY the JSON array, nothing else
 """
 
