@@ -20,50 +20,86 @@ import google.generativeai as genai
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import config
 
-# ── Niche → RSS feeds mapping ──
+# ── Niche → RSS feeds mapping (expanded with high-quality sources) ──
 NICHE_RSS_FEEDS = {
     "tech": [
-        "https://news.google.com/rss/search?q=technology+trending&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss/search?q=technology+trending+when:1d&hl=en-US&gl=US&ceid=US:en",
         "https://www.theverge.com/rss/index.xml",
         "https://feeds.arstechnica.com/arstechnica/technology-lab",
+        "https://news.google.com/rss/search?q=Apple+OR+Google+OR+Microsoft+OR+Samsung+when:1d&hl=en-US&gl=US&ceid=US:en",
     ],
     "ai": [
-        "https://news.google.com/rss/search?q=artificial+intelligence+news&hl=en-US&gl=US&ceid=US:en",
-        "https://news.google.com/rss/search?q=AI+breakthrough+OR+ChatGPT+OR+OpenAI+OR+Gemini+AI&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss/search?q=artificial+intelligence+when:1d&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss/search?q=ChatGPT+OR+OpenAI+OR+Gemini+AI+OR+Claude+when:1d&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss/search?q=AI+scandal+OR+AI+danger+OR+AI+breakthrough+when:1d&hl=en-US&gl=US&ceid=US:en",
     ],
     "finance": [
-        "https://news.google.com/rss/search?q=stock+market+OR+cryptocurrency+OR+economy&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss/search?q=stock+market+crash+OR+cryptocurrency+scandal+OR+economy+crisis+when:1d&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss/search?q=Bitcoin+OR+Tesla+stock+OR+Wall+Street+when:1d&hl=en-US&gl=US&ceid=US:en",
     ],
     "cinema": [
-        "https://news.google.com/rss/search?q=movies+box+office+OR+Hollywood+OR+Netflix+OR+streaming&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss/search?q=movies+box+office+OR+Hollywood+scandal+OR+Netflix+when:1d&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss/search?q=celebrity+drama+OR+actor+controversy+when:1d&hl=en-US&gl=US&ceid=US:en",
     ],
     "sports": [
-        "https://news.google.com/rss/search?q=sports+trending+OR+NFL+OR+NBA+OR+soccer+OR+cricket&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss/search?q=NFL+OR+NBA+OR+UFC+OR+soccer+when:1d&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss/search?q=sports+controversy+OR+athlete+scandal+OR+trade+when:1d&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss/search?q=LeBron+OR+Messi+OR+Mahomes+OR+boxing+when:1d&hl=en-US&gl=US&ceid=US:en",
     ],
     "science": [
-        "https://news.google.com/rss/search?q=science+discovery+OR+space+OR+biology+breakthrough&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss/search?q=science+discovery+OR+breakthrough+OR+shocking+study+when:1d&hl=en-US&gl=US&ceid=US:en",
     ],
     "gaming": [
-        "https://news.google.com/rss/search?q=gaming+news+OR+PlayStation+OR+Xbox+OR+Nintendo&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss/search?q=gaming+news+OR+PlayStation+OR+Xbox+OR+Nintendo+controversy+when:1d&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss/search?q=GTA+OR+Fortnite+OR+gaming+scandal+when:1d&hl=en-US&gl=US&ceid=US:en",
     ],
     "history": [
-        "https://news.google.com/rss/search?q=history+discovery+OR+archaeology+OR+ancient&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss/search?q=history+discovery+OR+archaeological+find+OR+ancient+secret+when:1d&hl=en-US&gl=US&ceid=US:en",
     ],
     "space": [
-        "https://news.google.com/rss/search?q=NASA+OR+SpaceX+OR+space+exploration+OR+astronomy&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss/search?q=NASA+OR+SpaceX+OR+space+discovery+when:1d&hl=en-US&gl=US&ceid=US:en",
     ],
     "popculture": [
-        "https://news.google.com/rss/search?q=viral+OR+celebrity+OR+pop+culture+OR+trending&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss/search?q=viral+celebrity+OR+influencer+drama+OR+trending+when:1d&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss/search?q=TikTok+OR+Instagram+OR+YouTube+drama+when:1d&hl=en-US&gl=US&ceid=US:en",
     ],
 }
 
+# ── Niche → Reddit subreddits for hot posts ──
+NICHE_SUBREDDITS = {
+    "tech": ["technology", "gadgets", "tech"],
+    "ai": ["artificial", "MachineLearning", "ChatGPT", "OpenAI"],
+    "finance": ["wallstreetbets", "CryptoCurrency", "stocks", "economics"],
+    "cinema": ["movies", "entertainment", "netflix", "television"],
+    "sports": ["sports", "nba", "nfl", "soccer", "MMA"],
+    "science": ["science", "Futurology", "space"],
+    "gaming": ["gaming", "pcgaming", "PS5", "XboxSeriesX"],
+    "history": ["history", "Archaeology", "todayilearned"],
+    "space": ["space", "SpaceXLounge", "nasa", "Astronomy"],
+    "popculture": ["entertainment", "popculturechat", "Celebs"],
+}
 
-def fetch_rss_headlines(niche: str, max_headlines: int = 15) -> list[str]:
+# ── Niche → YouTube Trending category IDs ──
+NICHE_YT_CATEGORIES = {
+    "tech": "28",        # Science & Technology
+    "ai": "28",          # Science & Technology
+    "finance": "25",     # News & Politics
+    "cinema": "24",      # Entertainment
+    "sports": "17",      # Sports
+    "science": "28",     # Science & Technology
+    "gaming": "20",      # Gaming
+    "history": "27",     # Education
+    "space": "28",       # Science & Technology
+    "popculture": "24",  # Entertainment
+}
+
+
+def fetch_rss_headlines(niche: str, max_headlines: int = 20) -> list[str]:
     """Fetch real headlines from RSS news feeds for the given niche."""
     import feedparser
 
     feeds = NICHE_RSS_FEEDS.get(niche, [
-        f"https://news.google.com/rss/search?q={niche}+trending&hl=en-US&gl=US&ceid=US:en",
+        f"https://news.google.com/rss/search?q={niche}+trending+when:1d&hl=en-US&gl=US&ceid=US:en",
     ])
 
     headlines = []
@@ -72,7 +108,10 @@ def fetch_rss_headlines(niche: str, max_headlines: int = 15) -> list[str]:
             feed = feedparser.parse(feed_url)
             for entry in feed.entries[:10]:
                 title = entry.get("title", "").strip()
-                if title and len(title) > 10:
+                # Clean up Google News attribution (e.g. " - CNN")
+                if " - " in title:
+                    title = title.rsplit(" - ", 1)[0].strip()
+                if title and len(title) > 15:
                     headlines.append(title)
         except Exception:
             continue
@@ -83,37 +122,90 @@ def fetch_rss_headlines(niche: str, max_headlines: int = 15) -> list[str]:
     return headlines[:max_headlines]
 
 
-def fetch_google_trends(niche: str) -> list[str]:
-    """Fetch real-time trending searches from Google Trends."""
+def fetch_youtube_trending(niche: str, max_results: int = 10) -> list[str]:
+    """Fetch currently trending YouTube videos for the niche category."""
+    import requests
+    
     try:
-        from pytrends.request import TrendReq
-
-        pytrends = TrendReq(hl='en-US', tz=360)
-
-        # Get today's trending searches
-        trending = pytrends.trending_searches(pn='united_states')
-        trends_list = trending[0].tolist()[:10]
-
-        return [t for t in trends_list if isinstance(t, str) and len(t) > 2]
+        # Use YouTube Data API v3 — key is same as GEMINI_API_KEY for Google Cloud
+        api_key = config.GEMINI_API_KEY
+        category_id = NICHE_YT_CATEGORIES.get(niche, "0")
+        
+        url = "https://www.googleapis.com/youtube/v3/videos"
+        params = {
+            "part": "snippet,statistics",
+            "chart": "mostPopular",
+            "regionCode": "US",
+            "videoCategoryId": category_id,
+            "maxResults": max_results,
+            "key": api_key,
+        }
+        
+        r = requests.get(url, params=params)
+        if r.status_code == 200:
+            data = r.json()
+            titles = []
+            for item in data.get("items", []):
+                title = item.get("snippet", {}).get("channelTitle", "") + ": " + item.get("snippet", {}).get("title", "")
+                view_count = int(item.get("statistics", {}).get("viewCount", "0"))
+                # Only include videos with significant traction
+                if view_count > 50000:
+                    titles.append(item.get("snippet", {}).get("title", ""))
+            return titles
+        else:
+            print(f"    ⚠️  YouTube API: {r.status_code}")
+            return []
     except Exception as e:
-        print(f"    ⚠️  Google Trends fetch failed: {e}")
+        print(f"    ⚠️  YouTube Trending fetch failed: {e}")
         return []
 
 
+def fetch_reddit_hot(niche: str, max_posts: int = 10) -> list[str]:
+    """Fetch hot posts from relevant Reddit subreddits."""
+    import requests
+    
+    subreddits = NICHE_SUBREDDITS.get(niche, [niche])
+    headlines = []
+    
+    headers = {"User-Agent": "ShortsFactory/1.0"}
+    
+    for sub in subreddits[:2]:  # Limit to 2 subreddits to avoid rate limits
+        try:
+            url = f"https://www.reddit.com/r/{sub}/hot.json?limit=10"
+            r = requests.get(url, headers=headers, timeout=5)
+            if r.status_code == 200:
+                data = r.json()
+                for post in data.get("data", {}).get("children", []):
+                    post_data = post.get("data", {})
+                    title = post_data.get("title", "")
+                    score = post_data.get("score", 0)
+                    # Only include posts with good engagement
+                    if score > 100 and len(title) > 15 and not post_data.get("stickied"):
+                        headlines.append(title)
+        except Exception:
+            continue
+    
+    return headlines[:max_posts]
+
+
 def discover_trending_topics(niche: str, count: int) -> list[str]:
-    """Pull REAL trending data from Google Trends + RSS, then use Gemini
-    controversy scoring to pick only the most viral-worthy topics (7+/10)."""
+    """Pull REAL trending data from YouTube Trending + Reddit + RSS, then use Gemini
+    controversy scoring to pick only the most viral-worthy topics (8+/10)."""
     print(f"  🔍 Fetching REAL trending data for '{niche}'...")
 
-    # 1. Get real headlines from RSS (more headlines = better selection)
+    # 1. YouTube Trending — what's actually going viral on YouTube RIGHT NOW
+    yt_trending = fetch_youtube_trending(niche, max_results=10)
+    print(f"    🎬 Found {len(yt_trending)} YouTube trending videos")
+
+    # 2. Reddit Hot — engagement-validated topics people are actively discussing
+    reddit_hot = fetch_reddit_hot(niche, max_posts=10)
+    print(f"    🔥 Found {len(reddit_hot)} Reddit hot posts")
+
+    # 3. RSS News — breaking news from last 24 hours
     rss_headlines = fetch_rss_headlines(niche, max_headlines=20)
-    print(f"    📰 Found {len(rss_headlines)} real news headlines")
+    print(f"    📰 Found {len(rss_headlines)} news headlines")
 
-    # 2. Get Google Trends
-    google_trends = fetch_google_trends(niche)
-    print(f"    📈 Found {len(google_trends)} Google trending searches")
-
-    all_real_data = rss_headlines + google_trends
+    all_real_data = yt_trending + reddit_hot + rss_headlines
 
     if not all_real_data:
         print(f"  ⚠️  No real-time data found, falling back to curated pool")
