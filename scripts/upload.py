@@ -71,12 +71,21 @@ def upload_short(script_path: Path, schedule_time: datetime = None, privacy: str
         f"{tags_str}"
     )
 
+    # Dynamic category ID based on niche
+    niche = script.get("niche", "tech")
+    NICHE_CATEGORIES = {
+        "tech": "28", "ai": "28", "finance": "25", "cinema": "24",
+        "sports": "17", "science": "28", "gaming": "20", "history": "27",
+        "space": "28", "popculture": "24",
+    }
+    category_id = NICHE_CATEGORIES.get(niche, "28")
+
     body = {
         "snippet": {
             "title": title,
             "description": description,
             "tags": [t.replace("#", "") for t in tags_list],
-            "categoryId": "28",  # Science & Technology
+            "categoryId": category_id,
             "defaultLanguage": "en",
         },
         "status": {

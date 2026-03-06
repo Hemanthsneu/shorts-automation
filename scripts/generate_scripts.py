@@ -65,21 +65,7 @@ NICHE_RSS_FEEDS = {
     ],
 }
 
-# ── Niche → Reddit subreddits for hot posts ──
-NICHE_SUBREDDITS = {
-    "tech": ["technology", "gadgets", "tech"],
-    "ai": ["artificial", "MachineLearning", "ChatGPT", "OpenAI"],
-    "finance": ["wallstreetbets", "CryptoCurrency", "stocks", "economics"],
-    "cinema": ["movies", "entertainment", "netflix", "television"],
-    "sports": ["sports", "nba", "nfl", "soccer", "MMA"],
-    "science": ["science", "Futurology", "space"],
-    "gaming": ["gaming", "pcgaming", "PS5", "XboxSeriesX"],
-    "history": ["history", "Archaeology", "todayilearned"],
-    "space": ["space", "SpaceXLounge", "nasa", "Astronomy"],
-    "popculture": ["entertainment", "popculturechat", "Celebs"],
-}
-
-# ── Niche → YouTube Trending category IDs ──
+# ── Niche → YouTube category IDs for upload metadata ──
 NICHE_YT_CATEGORIES = {
     "tech": "28",        # Science & Technology
     "ai": "28",          # Science & Technology
@@ -141,62 +127,20 @@ def fetch_google_trends_rss(max_results: int = 15) -> list[str]:
         return []
 
 
-def fetch_gemini_trending(niche: str, count: int = 10) -> list[str]:
-    """Use Gemini to identify what's currently trending and viral in the niche.
-    This leverages Gemini's real-time knowledge to suggest the hottest topics."""
-    try:
-        genai.configure(api_key=config.GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-2.5-flash")
-        
-        today = datetime.now().strftime("%B %d, %Y")
-        
-        prompt = f"""Today is {today}. What are the TOP {count} most VIRAL and CONTROVERSIAL topics 
-trending RIGHT NOW in the '{niche}' space that would make explosive YouTube Shorts?
-
-Focus on:
-- Specific named people, companies, or events in the news TODAY
-- Scandals, controversies, or shocking revelations  
-- Topics that people are actively debating and arguing about
-- Breaking news that just happened in the last 24-48 hours
-
-Return ONLY a JSON array of headline strings. No markdown, no explanation.
-Example: ["Elon Musk caught doing X", "NBA star accused of Y"]"""
-        
-        response = model.generate_content(prompt)
-        text = response.text.strip()
-        if text.startswith("```"):
-            text = text.split("\n", 1)[1]
-        if text.endswith("```"):
-            text = text.rsplit("```", 1)[0]
-        text = text.strip()
-        
-        import json
-        topics = json.loads(text)
-        if isinstance(topics, list):
-            return [t for t in topics if isinstance(t, str) and len(t) > 10][:count]
-    except Exception as e:
-        print(f"    ⚠️  Gemini trending analysis failed: {e}")
-    return []
-
-
 def discover_trending_topics(niche: str, count: int) -> list[str]:
-    """Pull REAL trending data from Google Trends + Gemini AI + RSS, then use Gemini
-    controversy scoring to pick only the most viral-worthy topics (8+/10)."""
-    print(f"  🔍 Fetching REAL trending data for '{niche}'...")
+    """Pull VERIFIED real trending data from Google Trends + RSS only.
+    No AI-generated topics — those cause hallucinated fake events."""
+    print(f"  🔍 Fetching VERIFIED trending data for '{niche}'...")
 
     # 1. Google Trends RSS — what people are ACTUALLY searching for right now
     google_trends = fetch_google_trends_rss(max_results=15)
     print(f"    📈 Found {len(google_trends)} Google Trends topics")
 
-    # 2. Gemini AI Trending — AI-identified viral topics in the niche
-    gemini_trending = fetch_gemini_trending(niche, count=10)
-    print(f"    🤖 Found {len(gemini_trending)} Gemini AI trending topics")
+    # 2. RSS News — breaking news from last 24 hours (verified real headlines)
+    rss_headlines = fetch_rss_headlines(niche, max_headlines=25)
+    print(f"    📰 Found {len(rss_headlines)} verified news headlines")
 
-    # 3. RSS News — breaking news from last 24 hours
-    rss_headlines = fetch_rss_headlines(niche, max_headlines=20)
-    print(f"    📰 Found {len(rss_headlines)} news headlines")
-
-    all_real_data = google_trends + gemini_trending + rss_headlines
+    all_real_data = google_trends + rss_headlines
 
     if not all_real_data:
         print(f"  ⚠️  No real-time data found, falling back to curated pool")
@@ -291,68 +235,72 @@ def generate_scripts(niche: str, count: int, batch_id: str) -> list[dict]:
 
     prompt = f"""{niche_cfg['system_prompt']}
 
-Today is {today}. Generate exactly {count} YouTube Shorts scripts about topics that are CURRENTLY trending.
+Today is {today}. Generate exactly {count} YouTube Shorts scripts.
 Return ONLY valid JSON — no markdown, no code fences.
 
-WHAT MAKES A SHORT GO VIRAL (follow this EXACTLY):
-Our top performing video "OpenAI's SHOCKING 'Sky' Voice Scandal EXPOSED" hit 2,000+ views because:
-1. It NAMED a specific company/person (OpenAI, Scarlett Johansson)
-2. It had an EXPOSE angle ("caught", "exposed", "scandal")
-3. The hook was a SPECIFIC claim, not generic clickbait
-4. It felt like BREAKING NEWS the viewer hadn't heard yet
-5. It created OUTRAGE — viewers felt compelled to comment
+⚠️ ABSOLUTE RULE — DO NOT FABRICATE:
+- You are given REAL news headlines below. Your script MUST be about ONE of these REAL stories.
+- DO NOT invent events, people, companies, products, or scandals that don't exist.
+- DO NOT create fictional names like "Dr. Ishikawa" or fake products like "OmniCreator" or "Project Chimera".
+- If you are not 100% certain the event/person/company is REAL, do NOT write about it.
+- Your script should ONLY contain facts that actually happened. No speculation presented as fact.
 
-YOU MUST FOLLOW THIS FORMULA:
-- ALWAYS name specific people, companies, or organizations in the title
-- Frame as an EXPOSE: someone got caught, a secret leaked, the truth came out
-- The hook must make a SPECIFIC shocking claim (never vague)
-- Body must include REAL details: dates, numbers, quotes, specifics
-- Create a VILLAIN vs VICTIM narrative — viewers love taking sides
-- End with an UNRESOLVED question that forces viewers to comment
-- The title MUST read like a news alert someone would screenshot and share
+WHAT MAKES A SHORT GO VIRAL ON YOUTUBE:
+Our best video "OpenAI's SHOCKING 'Sky' Voice Scandal EXPOSED" hit 2,000 views because:
+1. It was about a REAL event people were actively googling (OpenAI + Scarlett Johansson)
+2. The title contained SEARCH KEYWORDS people actually type into YouTube
+3. It explained a real story with real details viewers hadn't heard yet
+4. It created genuine debate — viewers felt compelled to comment
 
-TITLE FORMULAS THAT WORK (pick one):
-- "[Famous Name] Just Got CAUGHT Doing [Shocking Thing]" 
-- "[Company] Has Been LYING About [Topic]... Here's Proof"
-- "The [Industry] Secret They Don't Want You to Know"
-- "[Breaking Event]: What Nobody Is Telling You"
-- "[Person] EXPOSED: The [Number] Things They're Hiding"
+SEO-FIRST TITLE STRATEGY (THIS IS CRITICAL FOR YOUTUBE DISCOVERY):
+- Your title MUST contain keywords people actually search on YouTube
+- Use the REAL names of people/companies/events from the headline
+- Format: "[Real Person/Company] + [What Happened] + [Hook Word]"
+- Good examples: "Why Tesla Just Fired 10,000 Workers", "The Real Reason LeBron Is Leaving"
+- BAD examples: "Person X CAUGHT doing Y!!!" (too clickbaity, YouTube suppresses these)
+- Keep titles natural and searchable, not ALL CAPS clickbait
+
+HOW TO WRITE THE SCRIPT:
+1. HOOK (first 3 seconds): State the shocking REAL fact. Use the actual name from the headline.
+2. CONTEXT (next 15 seconds): Explain the real backstory briefly. Who is involved? What happened?
+3. THE REVEAL (next 20 seconds): The key detail most people don't know. Use real facts, numbers, dates.
+4. WHY IT MATTERS (next 15 seconds): How this affects the viewer or the world.
+5. CLOSER (last 5 seconds): Ask a genuine question to drive comments. NOT "Type YES or NO"
 
 Return a JSON array where each element has:
 {{
   "id": "S001",
-  "title": "MUST name a specific person/company + use EXPOSED/CAUGHT/SHOCKING — under 70 chars",
-  "hook": "first 2-3 sec, a SPECIFIC shocking claim with a named entity, 10-15 words, must trigger outrage or disbelief",
-  "body": "main content, 130-160 words. Start with context (who/what). Then the revelation (what happened). Then WHY it matters (how it affects viewers). Use specific numbers, dates, and names. Short punchy sentences. Build tension to a climax.",
-  "outro": "end with a provocative question or unresolved cliffhanger that FORCES comments, 10-15 words",
-  "description": "First line: exact topic keyword phrase. Second line: 1-sentence summary. Third line: 'Follow for daily exposés and breaking stories!' Then 15+ hashtags: #Shorts #Viral #Trending #Exposed #Breaking #[TopicSpecific] {' '.join(niche_cfg['hashtags'])}",
-  "tags": ["#Shorts", "#Viral", "#Trending", "#MustWatch", "#Exposed", "#Breaking", "#DidYouKnow", "#Facts"] + {json.dumps(niche_cfg['hashtags'])},
-  "pinned_comment": "a POLARIZING question that forces people to pick a side, e.g. 'Do you think [person] should be held accountable? YES or NO 👇'",
+  "title": "SEO-searchable title with real names, under 70 chars, NOT all caps clickbait",
+  "hook": "first 3 sec, state the shocking real fact with a real name, 10-15 words",
+  "body": "main content, 130-160 words. Based ONLY on real facts from the headline. Include real names, real dates, real numbers. Short punchy sentences. Build to a climax.",
+  "outro": "genuine question that drives real discussion, 10-15 words, NOT 'Type YES or NO'",
+  "description": "First line: main keyword phrase people would search. Second line: 1-sentence summary of the real story. Third line: 'Follow for daily deep dives!' Then 10+ relevant hashtags: #Shorts #[TopicKeyword] #[PersonName] {' '.join(niche_cfg['hashtags'])}",
+  "tags": ["#Shorts", "#[PersonOrCompanyName]", "#[TopicKeyword]", "#[NicheTag]", "#Trending", "#Explained", "#News"] + {json.dumps(niche_cfg['hashtags'])},
+  "pinned_comment": "a thoughtful question related to the topic that sparks real discussion",
   "visual_cues": [
-    {{"timestamp": "0-3s", "description": "dramatic close-up or headline-style visual — immediately signals THIS IS IMPORTANT"}},
-    {{"timestamp": "3-20s", "description": "visual of the person/company/event being discussed — establishes WHO"}},
-    {{"timestamp": "20-40s", "description": "visual showing the evidence/revelation — the PROOF"}},
-    {{"timestamp": "40-55s", "description": "dramatic visual showing impact/consequences — WHY IT MATTERS"}}
+    {{"timestamp": "0-3s", "description": "dramatic photorealistic image of the person or event — immediately recognizable"}},
+    {{"timestamp": "3-20s", "description": "visual context: the setting, company, or situation being discussed"}},
+    {{"timestamp": "20-40s", "description": "visual showing the key revelation or evidence"}},
+    {{"timestamp": "40-55s", "description": "powerful conclusion visual — the aftermath or consequences"}}
   ],
   "veo3_prompts": [
-    "cinematic 9:16 dramatic close-up related to the topic, photorealistic, breaking-news energy, red/dark tones",
-    "cinematic 9:16 wide shot establishing the scene/person, photorealistic, dramatic lighting",
+    "cinematic 9:16 dramatic close-up related to the topic, photorealistic, breaking-news energy",
+    "cinematic 9:16 wide shot establishing the scene, photorealistic, dramatic lighting",
     "cinematic 9:16 the key evidence or revelation moment, photorealistic, intense atmosphere",
-    "cinematic 9:16 dramatic conclusion shot, photorealistic, somber or powerful mood"
+    "cinematic 9:16 dramatic conclusion shot, photorealistic, powerful mood"
   ]
 }}
 
-Topics to cover (one script per topic — make these VIRAL EXPOSÉS):
+VERIFIED REAL HEADLINES to choose from (pick the most viral-worthy one):
 {chr(10).join(f'{i+1}. {t}' for i, t in enumerate(topics))}
 
 Visual style direction: {niche_cfg['visual_style']}
 
 CRITICAL RULES:
 - Total spoken words per script: 140-170 (equals 55-65 seconds)
-- EVERY title MUST name a specific person, company, or organization
-- NEVER use generic titles like "3 Shocking Facts" — always tie to a NAMED entity
-- Scripts MUST reference CURRENT events happening TODAY — NO old news
-- The viewer should feel like they're getting INSIDER information
+- Script MUST be about ONE of the real headlines above — do NOT invent a new topic
+- The title must be SEARCHABLE — use keywords people actually type into YouTube
+- NO fabricated names, events, or companies — only real ones from the headlines
 - Return ONLY the JSON array, nothing else
 """
 
