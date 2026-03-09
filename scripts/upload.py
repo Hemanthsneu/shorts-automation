@@ -32,8 +32,13 @@ def get_youtube_service():
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
+            try:
+                creds.refresh(Request())
+            except Exception as e:
+                print(f"  ⚠️  Token refresh failed: {e}")
+                print(f"  🔄 Will re-run OAuth flow...")
+                creds = None
+        if not creds or not creds.valid:
             if not CLIENT_SECRET.exists():
                 raise FileNotFoundError(
                     "Run 'python scripts/youtube_auth.py' first to set up OAuth"
