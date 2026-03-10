@@ -17,13 +17,14 @@
 cd "/Users/hemanth/Downloads/files (3)/shorts-automation"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
-# High-viral-potential niches (weighted by past performance)
-# AI + Sports + PopCulture = highest engagement historically
-HIGH_WEIGHT=(ai sports popculture ai sports popculture tech cinema)
-MED_WEIGHT=(finance science gaming space history)
+# Top-performing niches (based on analytics data — these get the most views)
+# ai=1812 views peak, sports=903, popculture=273, science=1026
+# Focus on proven winners until channel authority builds
+HIGH_WEIGHT=(ai sports popculture ai sports ai popculture science)
+MED_WEIGHT=(tech cinema)
 ALL_NICHES=("${HIGH_WEIGHT[@]}" "${MED_WEIGHT[@]}")
 
-# Pick 1 random niche (weighted toward high performers)
+# Pick 1 random niche (heavily weighted toward proven top performers)
 NICHE=$(python3 -c "import random; print(random.choice('${ALL_NICHES[*]}'.split()))")
 
 HOUR=$(date '+%H')

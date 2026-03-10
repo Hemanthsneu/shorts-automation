@@ -27,6 +27,8 @@ VOICE_OPTIONS = {
 
 async def generate_voice(script_path: Path) -> Path:
     """Generate voiceover MP3 from a script JSON file."""
+    import random
+
     script = json.loads(script_path.read_text())
     script_id = script["id"]
     full_text = script["full_script"]
@@ -34,13 +36,19 @@ async def generate_voice(script_path: Path) -> Path:
     output_mp3 = config.AUDIO_DIR / f"{script_id}.mp3"
     output_srt = config.AUDIO_DIR / f"{script_id}.srt"
 
+    # Pick a niche-specific voice (rotate to avoid algorithm fingerprinting)
+    niche = script.get("niche", "tech")
+    voice_pool = config.NICHE_VOICES.get(niche, [config.VOICE_NAME])
+    selected_voice = random.choice(voice_pool)
+
     # Use SubMaker for word-level timing (useful for captions)
     communicate = edge_tts.Communicate(
         text=full_text,
-        voice=config.VOICE_NAME,
+        voice=selected_voice,
         rate=config.VOICE_RATE,
         pitch="+0Hz",
     )
+    print(f"    🗣️  Voice: {selected_voice} (from {niche} pool)")
 
     submaker = edge_tts.SubMaker()
 

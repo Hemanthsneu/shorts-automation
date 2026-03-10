@@ -45,7 +45,7 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          python3 pipeline.py --count 1 --niche "$(python3 -c "import random; print(random.choice(['ai','sports','popculture','ai','sports','popculture','tech','cinema','finance','science','gaming','space','history']))")" --fallback --auto-upload --privacy public
+          python3 pipeline.py --count 1 --niche "$(python3 -c "import random; print(random.choice(['ai','sports','popculture','ai','sports','ai','popculture','science','tech','cinema']))")" --fallback --auto-upload --privacy public
 
       - name: 📊 Show status
         if: always()

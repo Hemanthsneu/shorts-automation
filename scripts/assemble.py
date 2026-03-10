@@ -61,13 +61,18 @@ def assemble_short(script_path: Path) -> Path:
     # Add captions if SRT exists
     srt_filter = ""
     if srt_path.exists():
-        escaped_srt_path = str(srt_path).replace(':', r'\\:')
+        # Use a simpler approach: copy SRT to a safe temp path without special chars
+        import shutil
+        safe_srt = Path(tempfile.gettempdir()) / f"{sid}_captions.srt"
+        shutil.copy2(str(srt_path), str(safe_srt))
+        escaped_srt_path = str(safe_srt).replace(':', r'\\:')
         srt_filter = (
             f"[vig]subtitles={escaped_srt_path}:"
-            f"force_style='Fontname=Arial Black,Fontsize=18,"
+            f"force_style='Fontname=Arial Black,Fontsize=24,"
             f"PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
-            f"BorderStyle=3,Outline=2,Shadow=0,"
-            f"Alignment=2,MarginV=120'"
+            f"BackColour=&H80000000,"
+            f"BorderStyle=4,Outline=0,Shadow=0,"
+            f"Alignment=2,MarginV=100,Bold=1'"
             f"[captioned]"
         )
     else:
@@ -100,6 +105,8 @@ def assemble_short(script_path: Path) -> Path:
     result = subprocess.run(concat_cmd, capture_output=True, text=True)
 
     if result.returncode != 0:
+        print(f"  ⚠️  Caption rendering failed for {sid}, falling back to no-caption assembly")
+        print(f"     FFmpeg error: {result.stderr[-300:] if result.stderr else 'no error output'}")
         # Fallback: simpler assembly without captions filter
         simple_cmd = [
             "ffmpeg", "-y",

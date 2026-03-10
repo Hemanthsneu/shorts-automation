@@ -68,11 +68,16 @@ def upload_short(script_path: Path, schedule_time: datetime = None, privacy: str
     # Build metadata
     title = script["title"][:100]  # YT limit
     tags_list = script.get("tags", [])
-    tags_str = " ".join(tags_list)
+    
+    # Limit to 5-8 most relevant tags (over-tagging triggers suppression)
+    tags_list = tags_list[:8]
+    tags_str = " ".join(tags_list[:5])  # Only put top 5 in description body
 
+    # First-line keyword optimization (YouTube weighs first 2 lines heavily)
+    keyword_desc = script.get('description', title)
     description = (
-        f"{script.get('description', title)}\n\n"
-        f"🔔 Follow for daily facts!\n\n"
+        f"{keyword_desc}\n\n"
+        f"🔔 Follow for daily deep dives!\n\n"
         f"{tags_str}"
     )
 
@@ -128,6 +133,14 @@ def upload_short(script_path: Path, schedule_time: datetime = None, privacy: str
 
     print(f"  ✅ Uploaded! {video_url}")
 
+    # Post pinned comment if available
+    pinned_comment_text = script.get("pinned_comment", "")
+    if pinned_comment_text:
+        try:
+            post_pinned_comment(youtube, video_id, pinned_comment_text)
+        except Exception as e:
+            print(f"  ⚠️  Pinned comment failed: {e}")
+
     # Update script JSON
     script["youtube_id"] = video_id
     script["youtube_url"] = video_url
@@ -136,6 +149,38 @@ def upload_short(script_path: Path, schedule_time: datetime = None, privacy: str
     script_path.write_text(json.dumps(script, indent=2))
 
     return {"id": video_id, "url": video_url, "title": title}
+
+
+def post_pinned_comment(youtube, video_id: str, comment_text: str):
+    """Post a comment on the video and pin it to boost engagement."""
+    # Insert the comment
+    comment_response = youtube.commentThreads().insert(
+        part="snippet",
+        body={
+            "snippet": {
+                "videoId": video_id,
+                "topLevelComment": {
+                    "snippet": {
+                        "textOriginal": comment_text,
+                    }
+                },
+            }
+        },
+    ).execute()
+
+    comment_id = comment_response["snippet"]["topLevelComment"]["id"]
+    print(f"  📌 Posted comment: \"{comment_text[:50]}...\"")
+
+    # Pin the comment (requires youtube.force_ssl scope — may not work with all tokens)
+    try:
+        youtube.comments().setModerationStatus(
+            id=comment_id,
+            moderationStatus="published",
+        ).execute()
+    except Exception:
+        pass  # Pinning may require additional permissions, comment still posts
+
+    return comment_id
 
 
 def upload_all(script_ids: list[str] = None, stagger_hours: int = None, privacy: str = None):

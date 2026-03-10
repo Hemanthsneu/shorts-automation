@@ -30,8 +30,23 @@ SHORTS_PER_RUN = int(os.getenv("SHORTS_PER_RUN", "3"))
 
 # ── Voice ──
 VOICE_NAME = os.getenv("VOICE_NAME", "en-US-AndrewNeural")
-VOICE_RATE = os.getenv("VOICE_RATE", "+10%")
+VOICE_RATE = os.getenv("VOICE_RATE", "+15%")
 BG_MUSIC_VOLUME = float(os.getenv("BACKGROUND_MUSIC_VOLUME", "0.12"))
+
+# ── Niche-Specific Voice Rotation ──
+# Rotate voices per niche to avoid "same-sounding automated content" fingerprint
+NICHE_VOICES = {
+    "tech": ["en-US-AndrewNeural", "en-US-GuyNeural", "en-GB-RyanNeural"],
+    "ai": ["en-US-AndrewNeural", "en-GB-RyanNeural", "en-US-GuyNeural"],
+    "finance": ["en-GB-RyanNeural", "en-US-AndrewNeural", "en-AU-WilliamNeural"],
+    "cinema": ["en-US-GuyNeural", "en-US-AndrewNeural", "en-GB-RyanNeural"],
+    "sports": ["en-US-GuyNeural", "en-US-AndrewNeural", "en-AU-WilliamNeural"],
+    "science": ["en-GB-RyanNeural", "en-US-AndrewNeural", "en-US-GuyNeural"],
+    "gaming": ["en-US-GuyNeural", "en-US-AndrewNeural", "en-AU-WilliamNeural"],
+    "history": ["en-GB-RyanNeural", "en-US-AndrewNeural", "en-GB-SoniaNeural"],
+    "space": ["en-GB-RyanNeural", "en-US-AndrewNeural", "en-US-GuyNeural"],
+    "popculture": ["en-US-GuyNeural", "en-US-JennyNeural", "en-US-AndrewNeural"],
+}
 
 # ── Upload ──
 AUTO_UPLOAD = os.getenv("AUTO_UPLOAD", "false").lower() == "true"
