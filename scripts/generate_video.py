@@ -111,23 +111,20 @@ def _generate_image_imagen4(prompt: str, output_path: Path) -> bool:
 
 
 def generate_image_gemini(prompt: str, output_path: Path) -> bool:
-    """Generate image using dual-engine: Gemini Flash (primary) → Imagen 4 (fallback)."""
+    """Generate image using dual-engine: Imagen 4 (primary) → Gemini Flash (fallback)."""
     try:
-        # Try Gemini 2.0 Flash first (better compositional understanding)
-        if _generate_image_gemini_flash(prompt, output_path):
-            return True
-        
-        print("    🔄 Gemini Flash failed, trying Imagen 4...")
-        # Fallback to Imagen 4.0 Fast
         if _generate_image_imagen4(prompt, output_path):
             return True
-        
-        # One more retry on Gemini Flash (handles transient 503s)
+
+        print("    🔄 Imagen 4 failed, trying Gemini Flash...")
+        if _generate_image_gemini_flash(prompt, output_path):
+            return True
+
         import time
         time.sleep(2)
-        print("    🔄 Retrying Gemini Flash...")
-        return _generate_image_gemini_flash(prompt, output_path)
-        
+        print("    🔄 Retrying Imagen 4...")
+        return _generate_image_imagen4(prompt, output_path)
+
     except Exception as e:
         print(f"    ❌ Image generation error: {e}")
         return False

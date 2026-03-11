@@ -24,7 +24,8 @@ def get_youtube_service():
     from googleapiclient.discovery import build
 
     SCOPES = ["https://www.googleapis.com/auth/youtube.upload",
-               "https://www.googleapis.com/auth/youtube"]
+               "https://www.googleapis.com/auth/youtube",
+               "https://www.googleapis.com/auth/youtube.force-ssl"]
 
     creds = None
     if TOKEN_FILE.exists():
