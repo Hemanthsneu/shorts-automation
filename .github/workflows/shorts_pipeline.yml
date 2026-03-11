@@ -29,9 +29,14 @@ jobs:
           sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Set up credentials
+        env:
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET_JSON }}
+          YOUTUBE_TOKEN: ${{ secrets.YOUTUBE_TOKEN_JSON }}
         run: |
-          echo '${{ secrets.CLIENT_SECRET_JSON }}' > client_secret.json
-          echo '${{ secrets.YOUTUBE_TOKEN_JSON }}' > token.json
+          printf '%s' "$CLIENT_SECRET" > client_secret.json
+          printf '%s' "$YOUTUBE_TOKEN" > token.json
+          python3 -c "import json; json.load(open('client_secret.json')); print('client_secret.json OK')"
+          python3 -c "import json; json.load(open('token.json')); print('token.json OK')"
 
       - name: Create output dirs
         run: |

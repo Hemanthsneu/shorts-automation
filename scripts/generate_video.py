@@ -37,11 +37,11 @@ BURNS_EFFECTS = [
 
 
 def _generate_image_gemini_flash(prompt: str, output_path: Path) -> bool:
-    """Primary: Use Gemini 2.0 Flash for image generation (best compositional quality)."""
+    """Primary: Use Gemini 2.5 Flash for image generation."""
     import requests
     import base64
     
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key={config.GEMINI_API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-image-generation:generateContent?key={config.GEMINI_API_KEY}"
     
     full_prompt = (
         f"Generate a stunning, cinematic image for a YouTube Short: {prompt}. "
