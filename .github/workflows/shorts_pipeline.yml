@@ -1,61 +1,68 @@
-name: 🎬 Shorts Factory — 3x Daily Pipeline
+name: Shorts Factory v2.0 — Viral Intelligence Pipeline
 
 on:
   schedule:
-    # 4 runs per day at YouTube's PROVEN peak engagement hours (UTC times)
-    # 7 AM CT = 13:00 UTC — morning commuters + East Coast office workers
-    - cron: '0 13 * * *'
-    # 12 PM CT = 18:00 UTC — lunch break scrolling peak
-    - cron: '0 18 * * *'
-    # 5 PM CT = 23:00 UTC — after work/school prime time
-    - cron: '0 23 * * *'
-    # 9 PM CT = 03:00 UTC — late night scrolling + West Coast prime time
-    - cron: '0 3 * * *'
-  workflow_dispatch:  # Allow manual trigger from GitHub UI
+    # 4 runs per day at YouTube peak engagement hours (UTC)
+    - cron: '0 13 * * *'   # 7 AM CT — morning commute
+    - cron: '0 18 * * *'   # 12 PM CT — lunch break
+    - cron: '0 23 * * *'   # 5 PM CT — after work prime time
+    - cron: '0 3 * * *'    # 9 PM CT — late night scrolling
+  workflow_dispatch:
 
 jobs:
-  generate-short:
+  generate-viral-short:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
-      - name: 📥 Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 🐍 Set up Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: 📦 Install dependencies
+      - name: Install dependencies
         run: |
-          pip install -r requirements.txt feedparser pytrends gtts google-auth-httplib2
+          pip install -r requirements.txt
           sudo apt-get update && sudo apt-get install -y ffmpeg
 
-      - name: 🔑 Set up credentials
+      - name: Set up credentials
         run: |
           echo '${{ secrets.CLIENT_SECRET_JSON }}' > client_secret.json
           echo '${{ secrets.YOUTUBE_TOKEN_JSON }}' > token.json
 
-      - name: 📁 Create output dirs
+      - name: Create output dirs
         run: |
-          mkdir -p output/scripts output/audio output/video output/final
+          mkdir -p output/scripts output/audio output/video output/assembled output/analytics output/calendar output/sfx
 
-      - name: 🎬 Run Pipeline
+      - name: Run Viral Pipeline
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          VIRALITY_GATE: "true"
+          VIRALITY_THRESHOLD: "75"
+          SOUND_DESIGN: "true"
+          CAPTION_STYLE: "tiktok_pop"
+          ANALYTICS: "true"
         run: |
-          python3 pipeline.py --count 1 --niche "$(python3 -c "import random; print(random.choice(['ai','sports','popculture','ai','sports','ai','popculture','science','tech','cinema']))")" --fallback --auto-upload --privacy public
+          NICHE=$(python3 -c "import random; print(random.choice(['ai','sports','popculture','ai','sports','ai','popculture','science','tech','cinema','history']))")
+          echo "Selected niche: $NICHE"
+          python3 pipeline.py --count 1 --niche "$NICHE" --fallback --auto-upload --privacy public
 
-      - name: 📊 Show status
+      - name: Show status
         if: always()
         run: |
+          python3 pipeline.py --status || true
           python3 pipeline.py --log || true
 
-      - name: 💾 Save content log
+      - name: Save artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: content-log-${{ github.run_number }}
-          path: output/content_log.json
+          name: pipeline-output-${{ github.run_number }}
+          path: |
+            output/content_log.csv
+            output/analytics/
+            output/calendar/
           retention-days: 30

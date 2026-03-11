@@ -1,47 +1,47 @@
 #!/bin/bash
-# ──────────────────────────────────────────────────
-# 🚀 Shorts Factory — MONETIZATION SPRINT
-# ──────────────────────────────────────────────────
-# Posts 3 Shorts/day at YouTube peak engagement hours.
-# Uses controversy-scored trending topics for max reach.
+# ══════════════════════════════════════════════════════
+# Shorts Factory v2.0 — Viral Intelligence Cron Runner
+# ══════════════════════════════════════════════════════
+# Posts viral shorts at YouTube peak engagement hours.
+# Uses Viral Intelligence Engine for maximum reach.
 #
-# CRON SETUP (run: crontab -e, then paste these 3 lines):
+# CRON SETUP (run: crontab -e, then paste):
+#   0 6 * * * /path/to/shorts-automation/ngm/cron_run.sh >> /path/to/shorts-automation/ngm/output/cron.log 2>&1
+#   0 12 * * * /path/to/shorts-automation/ngm/cron_run.sh >> /path/to/shorts-automation/ngm/output/cron.log 2>&1
+#   0 18 * * * /path/to/shorts-automation/ngm/cron_run.sh >> /path/to/shorts-automation/ngm/output/cron.log 2>&1
+#   0 22 * * * /path/to/shorts-automation/ngm/cron_run.sh >> /path/to/shorts-automation/ngm/output/cron.log 2>&1
 #
-#   0 6 * * * /Users/hemanth/Downloads/files\ \(3\)/shorts-automation/cron_run.sh >> /Users/hemanth/Downloads/files\ \(3\)/shorts-automation/output/cron.log 2>&1
-#   0 12 * * * /Users/hemanth/Downloads/files\ \(3\)/shorts-automation/cron_run.sh >> /Users/hemanth/Downloads/files\ \(3\)/shorts-automation/output/cron.log 2>&1
-#   0 18 * * * /Users/hemanth/Downloads/files\ \(3\)/shorts-automation/cron_run.sh >> /Users/hemanth/Downloads/files\ \(3\)/shorts-automation/output/cron.log 2>&1
-#
-# = 3 Shorts/day × 14 days = 42 viral Shorts
-# ──────────────────────────────────────────────────
+# = 4 Shorts/day, virality-gated, analytics-driven
+# ══════════════════════════════════════════════════════
 
-cd "/Users/hemanth/Downloads/files (3)/shorts-automation"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
-# Top-performing niches (based on analytics data — these get the most views)
-# ai=1812 views peak, sports=903, popculture=273, science=1026
-# Focus on proven winners until channel authority builds
+# Niche rotation weighted by past performance
 HIGH_WEIGHT=(ai sports popculture ai sports ai popculture science)
-MED_WEIGHT=(tech cinema)
+MED_WEIGHT=(tech cinema history)
 ALL_NICHES=("${HIGH_WEIGHT[@]}" "${MED_WEIGHT[@]}")
 
-# Pick 1 random niche (heavily weighted toward proven top performers)
 NICHE=$(python3 -c "import random; print(random.choice('${ALL_NICHES[*]}'.split()))")
 
 HOUR=$(date '+%H')
 case $HOUR in
-  05|06|07) SLOT="🌅 Morning" ;;
-  11|12|13) SLOT="☀️ Midday" ;;
-  17|18|19) SLOT="🌆 Evening" ;;
-  *) SLOT="⏰ Manual" ;;
+  05|06|07) SLOT="Morning" ;;
+  11|12|13) SLOT="Midday" ;;
+  17|18|19) SLOT="Evening" ;;
+  21|22|23) SLOT="Night" ;;
+  *) SLOT="Manual" ;;
 esac
 
 echo ""
 echo "════════════════════════════════════════════════"
-echo "  🚀 MONETIZATION SPRINT — $SLOT Run"
-echo "  📅 $(date '+%Y-%m-%d %H:%M:%S')"
-echo "  🎯 Niche: ${NICHE}"  
+echo "  VIRAL PIPELINE v2.0 — $SLOT Run"
+echo "  $(date '+%Y-%m-%d %H:%M:%S')"
+echo "  Niche: ${NICHE}"
 echo "════════════════════════════════════════════════"
 
+# Generate 2 scripts, virality gate keeps the best 1
 python3 pipeline.py --count 1 --niche "$NICHE" --fallback --auto-upload --privacy public
 
-echo "✅ Done at $(date '+%H:%M:%S')"
+echo "Done at $(date '+%H:%M:%S')"

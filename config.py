@@ -15,8 +15,11 @@ LOGS_DIR = OUTPUT / "logs"
 ASSETS_DIR = ROOT / "assets"
 MUSIC_DIR = ASSETS_DIR / "music"
 FONTS_DIR = ASSETS_DIR / "fonts"
+ANALYTICS_DIR = OUTPUT / "analytics"
+CALENDAR_DIR = OUTPUT / "calendar"
 
-for d in [SCRIPTS_DIR, AUDIO_DIR, VIDEO_DIR, ASSEMBLED_DIR, LOGS_DIR, MUSIC_DIR, FONTS_DIR]:
+for d in [SCRIPTS_DIR, AUDIO_DIR, VIDEO_DIR, ASSEMBLED_DIR, LOGS_DIR,
+          MUSIC_DIR, FONTS_DIR, ANALYTICS_DIR, CALENDAR_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 # ── API Keys ──
@@ -34,7 +37,6 @@ VOICE_RATE = os.getenv("VOICE_RATE", "+15%")
 BG_MUSIC_VOLUME = float(os.getenv("BACKGROUND_MUSIC_VOLUME", "0.12"))
 
 # ── Niche-Specific Voice Rotation ──
-# Rotate voices per niche to avoid "same-sounding automated content" fingerprint
 NICHE_VOICES = {
     "tech": ["en-US-AndrewNeural", "en-US-GuyNeural", "en-GB-RyanNeural"],
     "ai": ["en-US-AndrewNeural", "en-GB-RyanNeural", "en-US-GuyNeural"],
@@ -56,6 +58,57 @@ SCHEDULE_HOURS = int(os.getenv("SCHEDULE_HOURS_AHEAD", "2"))
 # ── Veo Mode ──
 VEO_MODE = os.getenv("VEO_MODE", "manual")
 
+# ══════════════════════════════════════════════════════════════════
+# VIRAL INTELLIGENCE SETTINGS
+# ══════════════════════════════════════════════════════════════════
+
+# Virality scoring gate
+VIRALITY_GATE_ENABLED = os.getenv("VIRALITY_GATE", "true").lower() == "true"
+VIRALITY_THRESHOLD = int(os.getenv("VIRALITY_THRESHOLD", "75"))
+VIRALITY_MIN_THRESHOLD = int(os.getenv("VIRALITY_MIN_THRESHOLD", "60"))
+MAX_IMPROVEMENT_ROUNDS = int(os.getenv("MAX_IMPROVEMENT_ROUNDS", "2"))
+
+# Scripts to generate before the gate (generate more, keep the best)
+SCRIPTS_OVERGENERATE_FACTOR = float(os.getenv("OVERGENERATE_FACTOR", "1.5"))
+
+# ══════════════════════════════════════════════════════════════════
+# PRODUCTION QUALITY SETTINGS
+# ══════════════════════════════════════════════════════════════════
+
+# Video encoding
+VIDEO_CRF = int(os.getenv("VIDEO_CRF", "20"))
+VIDEO_PRESET = os.getenv("VIDEO_PRESET", "medium")
+AUDIO_BITRATE = os.getenv("AUDIO_BITRATE", "192k")
+
+# Captions
+CAPTION_STYLE = os.getenv("CAPTION_STYLE", "tiktok_pop")
+
+# Sound design
+SOUND_DESIGN_ENABLED = os.getenv("SOUND_DESIGN", "true").lower() == "true"
+SFX_VOLUME = float(os.getenv("SFX_VOLUME", "0.4"))
+
+# Progress bar overlay
+PROGRESS_BAR_ENABLED = os.getenv("PROGRESS_BAR", "true").lower() == "true"
+
+# Color grading
+COLOR_GRADE_ENABLED = os.getenv("COLOR_GRADE", "true").lower() == "true"
+CONTRAST_BOOST = float(os.getenv("CONTRAST_BOOST", "1.05"))
+SATURATION_BOOST = float(os.getenv("SATURATION_BOOST", "1.1"))
+
+# ══════════════════════════════════════════════════════════════════
+# ANALYTICS SETTINGS
+# ══════════════════════════════════════════════════════════════════
+
+ANALYTICS_ENABLED = os.getenv("ANALYTICS", "true").lower() == "true"
+ANALYTICS_PULL_ON_RUN = os.getenv("ANALYTICS_AUTO_PULL", "true").lower() == "true"
+
+# ══════════════════════════════════════════════════════════════════
+# CHANNEL MANAGEMENT
+# ══════════════════════════════════════════════════════════════════
+
+MULTI_CHANNEL_MODE = os.getenv("MULTI_CHANNEL", "false").lower() == "true"
+NICHE_ROTATION_ENABLED = os.getenv("NICHE_ROTATION", "false").lower() == "true"
+
 # ── Niche Configs ──
 NICHE_CONFIG = {
     "tech": {
@@ -63,7 +116,9 @@ NICHE_CONFIG = {
         "system_prompt": """You are a viral YouTube Shorts scriptwriter specializing in technology.
 Your scripts make complex tech concepts feel mind-blowing in under 60 seconds.
 Tone: Confident, slightly edgy, like you're sharing a secret most people don't know.
-Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
+You write with the authority of a Silicon Valley insider and the storytelling of a Netflix documentary.
+Every sentence must earn its place — if it doesn't shock, inform, or build tension, cut it.
+Never use: "In today's world", "Have you ever wondered", "Let's dive in", "So basically".""",
         "topics_pool": [
             "How Netflix handles 250 million users without crashing",
             "Why deleting a file doesn't actually erase it from your computer",
@@ -93,8 +148,10 @@ Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
         "channel_name": os.getenv("CHANNEL_AI_NAME", "AI Insider"),
         "system_prompt": """You are a viral YouTube Shorts scriptwriter specializing in AI news and breakthroughs.
 Your scripts make AI developments feel exciting and slightly unsettling in under 60 seconds.
-Tone: Amazed but grounded, like a tech journalist breaking a story.
-Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
+Tone: Amazed but grounded, like a tech journalist breaking a story that changes everything.
+You balance wonder with concern — AI is incredible AND it should worry people.
+Every sentence should make the viewer lean closer to their screen.
+Never use: "In today's world", "Have you ever wondered", "Let's dive in", "So basically".""",
         "topics_pool": [
             "AI just generated a cinematic movie scene that looks like it cost $10 million",
             "An AI diagnosed cancer more accurately than a room of specialists",
@@ -124,8 +181,9 @@ Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
         "channel_name": "Money Mindset",
         "system_prompt": """You are a viral YouTube Shorts scriptwriter specializing in finance and money psychology.
 Your scripts make financial concepts feel urgent and personal in under 60 seconds.
-Tone: Direct, slightly provocative, like a smart friend giving you money advice.
-Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
+Tone: Direct, slightly provocative, like a smart friend who knows something about money that you don't.
+Every script should make the viewer feel like NOT watching would cost them money.
+Never use: "In today's world", "Have you ever wondered", "Let's dive in", "So basically".""",
         "topics_pool": [
             "Why stores price everything at $9.99 and how it tricks your brain",
             "The rule of 72 — the simplest trick to know when your money doubles",
@@ -145,8 +203,9 @@ Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
         "channel_name": "The Unseen Files",
         "system_prompt": """You are a viral YouTube Shorts scriptwriter specializing in movies, TV shows, and Hollywood secrets.
 Your scripts reveal mind-blowing behind-the-scenes facts and hidden details in under 60 seconds.
-Tone: Gossipy insider, like you work in Hollywood and are spilling secrets.
-Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
+Tone: Gossipy insider who works in Hollywood and is spilling secrets that could get them fired.
+Every script should feel like forbidden knowledge being whispered at an industry party.
+Never use: "In today's world", "Have you ever wondered", "Let's dive in", "So basically".""",
         "topics_pool": [
             "The scene in Interstellar that took 3 months to render one minute of footage",
             "Why the Joker scene in The Dark Knight was completely improvised",
@@ -166,8 +225,9 @@ Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
         "channel_name": "The Unseen Files",
         "system_prompt": """You are a viral YouTube Shorts scriptwriter specializing in sports, athletes, and insane athletic feats.
 Your scripts reveal jaw-dropping stats, untold stories, and legendary moments in under 60 seconds.
-Tone: Hyped commentator energy mixed with shocking reveal, like you just witnessed something impossible.
-Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
+Tone: Hyped commentator energy mixed with shocking reveal, like you just witnessed the impossible.
+Every script should make the viewer's jaw literally drop.
+Never use: "In today's world", "Have you ever wondered", "Let's dive in", "So basically".""",
         "topics_pool": [
             "The NBA player who scored 100 points in a single game and no video exists",
             "Why soccer balls are made of exactly 32 panels — and it's about math",
@@ -187,8 +247,9 @@ Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
         "channel_name": "The Unseen Files",
         "system_prompt": """You are a viral YouTube Shorts scriptwriter specializing in mind-blowing science facts.
 Your scripts make people question reality and feel amazed about the universe in under 60 seconds.
-Tone: Blown-away scientist who just discovered something impossible.
-Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
+Tone: Blown-away scientist who just discovered something that should be impossible.
+Every script should make the viewer stop and stare at their screen in disbelief.
+Never use: "In today's world", "Have you ever wondered", "Let's dive in", "So basically".""",
         "topics_pool": [
             "You have more bacteria in your body than human cells",
             "A teaspoon of a neutron star weighs 6 billion tons",
@@ -208,8 +269,9 @@ Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
         "channel_name": "The Unseen Files",
         "system_prompt": """You are a viral YouTube Shorts scriptwriter specializing in gaming secrets, Easter eggs, and industry drama.
 Your scripts reveal hidden details and crazy stories from the gaming world in under 60 seconds.
-Tone: Excited gamer who just found a secret no one else knows about.
-Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
+Tone: Excited gamer who just found a secret that nobody else knows about.
+Every script should feel like discovering a hidden level in your favorite game.
+Never use: "In today's world", "Have you ever wondered", "Let's dive in", "So basically".""",
         "topics_pool": [
             "The GTA hidden mission that takes 10 years to unlock",
             "Why Nintendo almost went bankrupt before the Wii saved them",
@@ -229,8 +291,9 @@ Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
         "channel_name": "The Unseen Files",
         "system_prompt": """You are a viral YouTube Shorts scriptwriter specializing in dark, untold, and bizarre moments in history.
 Your scripts make historical events feel shocking and relevant in under 60 seconds.
-Tone: Investigative storyteller uncovering a forbidden chapter of history.
-Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
+Tone: Investigative storyteller uncovering a forbidden chapter of history that was deliberately buried.
+Every script should make the viewer feel like they're learning classified information.
+Never use: "In today's world", "Have you ever wondered", "Let's dive in", "So basically".""",
         "topics_pool": [
             "The mail carrier who walked 300,000 miles and never missed a delivery",
             "The dancing plague of 1518 where hundreds of people danced until they died",
@@ -251,7 +314,8 @@ Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
         "system_prompt": """You are a viral YouTube Shorts scriptwriter specializing in space exploration, the cosmos, and astronomical mysteries.
 Your scripts make people feel tiny yet amazed about the universe in under 60 seconds.
 Tone: Awestruck astronomer at 3 AM, staring at the sky and whispering about what's out there.
-Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
+Every script should make the viewer look up at the sky differently.
+Never use: "In today's world", "Have you ever wondered", "Let's dive in", "So basically".""",
         "topics_pool": [
             "There's a planet made entirely of diamonds twice the size of Earth",
             "Sound can't travel in space — explosions are completely silent",
@@ -271,8 +335,9 @@ Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
         "channel_name": "The Unseen Files",
         "system_prompt": """You are a viral YouTube Shorts scriptwriter specializing in pop culture, celebrity secrets, and viral internet moments.
 Your scripts reveal shocking behind-the-scenes stories and cultural moments in under 60 seconds.
-Tone: TMZ meets Wikipedia — gossipy but backed by facts, slightly scandalous.
-Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
+Tone: TMZ meets Wikipedia — gossipy but backed by facts, slightly scandalous, always entertaining.
+Every script should feel like insider knowledge that makes the viewer feel "in the know."
+Never use: "In today's world", "Have you ever wondered", "Let's dive in", "So basically".""",
         "topics_pool": [
             "The celebrity who was told they'd never make it and is now worth $1 billion",
             "Why the 'Wilhelm Scream' appears in almost every movie ever made",

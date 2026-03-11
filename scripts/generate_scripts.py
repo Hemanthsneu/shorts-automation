@@ -1,11 +1,14 @@
 """
-Stage 1: Generate short-form video scripts using Gemini API.
-Outputs JSON files with script, metadata, and Veo 3 prompts.
+Stage 1: Generate Viral Short-Form Scripts Using Gemini + Viral Intelligence Engine
 
-Features:
-- REAL real-time trending data from Google Trends + RSS news
-- Gemini writes scripts based on verified current topics
-- Viral-optimized prompts with subscriber CTAs
+This is the brain of the pipeline. It combines:
+- Real-time trending data (Google Trends + RSS)
+- Viral psychology patterns (from viral_engine.py)
+- Proven hook formulas and emotional arc structures
+- Virality pre-scoring and automatic improvement
+- SEO-first title strategy with named entity requirement
+
+The goal: Every script that exits this stage has a realistic shot at 100K+ views.
 """
 
 import json
@@ -20,8 +23,20 @@ import google.generativeai as genai
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import config
 from scripts.topic_history import load_history, add_topic, get_used_titles, get_used_headlines, migrate_from_content_log
+from scripts.viral_engine import (
+    VIRAL_FORMULAS,
+    HOOK_POWER_WORDS,
+    TITLE_FORMULAS,
+    POWER_ADJECTIVES,
+    POWER_VERBS,
+    ENGAGEMENT_DRIVERS,
+    RETENTION_STRATEGIES,
+    build_viral_prompt_context,
+    select_viral_formula,
+    get_caption_style,
+)
 
-# ── Niche → RSS feeds mapping (expanded with high-quality sources) ──
+# ── Niche → RSS feeds mapping ──
 NICHE_RSS_FEEDS = {
     "tech": [
         "https://news.google.com/rss/search?q=technology+trending+when:1d&hl=en-US&gl=US&ceid=US:en",
@@ -66,18 +81,10 @@ NICHE_RSS_FEEDS = {
     ],
 }
 
-# ── Niche → YouTube category IDs for upload metadata ──
 NICHE_YT_CATEGORIES = {
-    "tech": "28",        # Science & Technology
-    "ai": "28",          # Science & Technology
-    "finance": "25",     # News & Politics
-    "cinema": "24",      # Entertainment
-    "sports": "17",      # Sports
-    "science": "28",     # Science & Technology
-    "gaming": "20",      # Gaming
-    "history": "27",     # Education
-    "space": "28",       # Science & Technology
-    "popculture": "24",  # Entertainment
+    "tech": "28", "ai": "28", "finance": "25", "cinema": "24",
+    "sports": "17", "science": "28", "gaming": "20", "history": "27",
+    "space": "28", "popculture": "24",
 }
 
 
@@ -95,7 +102,6 @@ def fetch_rss_headlines(niche: str, max_headlines: int = 20) -> list[str]:
             feed = feedparser.parse(feed_url)
             for entry in feed.entries[:10]:
                 title = entry.get("title", "").strip()
-                # Clean up Google News attribution (e.g. " - CNN")
                 if " - " in title:
                     title = title.rsplit(" - ", 1)[0].strip()
                 if title and len(title) > 15:
@@ -103,20 +109,19 @@ def fetch_rss_headlines(niche: str, max_headlines: int = 20) -> list[str]:
         except Exception:
             continue
 
-    # Deduplicate and shuffle
     headlines = list(set(headlines))
     random.shuffle(headlines)
     return headlines[:max_headlines]
 
 
 def fetch_google_trends_rss(max_results: int = 15) -> list[str]:
-    """Fetch currently trending searches from Google Trends RSS (free, no API key)."""
+    """Fetch currently trending searches from Google Trends RSS."""
     import feedparser
-    
+
     try:
         url = "https://trends.google.com/trending/rss?geo=US"
         feed = feedparser.parse(url)
-        
+
         topics = []
         for entry in feed.entries[:max_results]:
             title = entry.get("title", "").strip()
@@ -129,8 +134,7 @@ def fetch_google_trends_rss(max_results: int = 15) -> list[str]:
 
 
 def fact_check_topics(topics: list[str], model) -> list[str]:
-    """Secondary Gemini call to reject hallucinated/unverifiable topics.
-    This is the critical gate that prevents zero-search-volume videos."""
+    """Reject hallucinated/unverifiable topics — critical quality gate."""
     if not topics:
         return topics
 
@@ -174,18 +178,14 @@ Format: [{{"headline": "exact headline text", "verdict": "KEEP" or "REJECT", "re
 
 
 def discover_trending_topics(niche: str, count: int) -> list[str]:
-    """Pull VERIFIED real trending data from Google Trends + RSS only.
-    No AI-generated topics — those cause hallucinated fake events."""
+    """Pull VERIFIED real trending data from Google Trends + RSS only."""
     print(f"  🔍 Fetching VERIFIED trending data for '{niche}'...")
 
-    # 0. Migrate topic history from content_log if first run
     migrate_from_content_log()
 
-    # 1. Google Trends RSS — what people are ACTUALLY searching for right now
     google_trends = fetch_google_trends_rss(max_results=15)
     print(f"    📈 Found {len(google_trends)} Google Trends topics")
 
-    # 2. RSS News — breaking news from last 24 hours (verified real headlines)
     rss_headlines = fetch_rss_headlines(niche, max_headlines=25)
     print(f"    📰 Found {len(rss_headlines)} verified news headlines")
 
@@ -195,11 +195,10 @@ def discover_trending_topics(niche: str, count: int) -> list[str]:
         print(f"  ⚠️  No real-time data found, falling back to curated pool")
         return None
 
-    # 2.5. Filter out previously used topics (dedup)
     used_titles = get_used_titles(limit=100)
     used_headlines = get_used_headlines(limit=100)
     used_set = set(t.lower() for t in used_titles + used_headlines)
-    
+
     before_count = len(all_real_data)
     all_real_data = [h for h in all_real_data if h.lower() not in used_set]
     deduped = before_count - len(all_real_data)
@@ -210,19 +209,18 @@ def discover_trending_topics(niche: str, count: int) -> list[str]:
         print(f"  ⚠️  All topics were duplicates, falling back to curated pool")
         return None
 
-    # 3. CONTROVERSY SCORING — Rate each headline for viral potential (threshold: 8+)
     genai.configure(api_key=config.GEMINI_API_KEY)
     model = genai.GenerativeModel("gemini-2.5-flash")
 
     today = datetime.now().strftime("%B %d, %Y")
 
-    # Include previously used titles so scorer can deprioritize similar angles
     used_context = ""
     if used_titles:
-        recent_used = used_titles[-20:]  # last 20 titles
+        recent_used = used_titles[-20:]
         used_context = f"\n\nALREADY USED TITLES (avoid similar topics):\n" + chr(10).join(f'- {t}' for t in recent_used)
 
-    prompt = f"""Today is {today}. You are a YouTube Shorts viral strategist.
+    prompt = f"""Today is {today}. You are a YouTube Shorts viral strategist specializing in predicting
+which topics will explode on short-form video.
 
 Score each headline below from 1-10 for VIRAL POTENTIAL as a 60-second YouTube Short.
 
@@ -233,6 +231,8 @@ SCORING CRITERIA (what gets 8-10):
 - Breaking news that people are ACTIVELY searching for RIGHT NOW
 - Stories that trigger strong emotions (outrage, shock, fear, amazement)
 - Topics with a clear debate angle (viewers will want to comment)
+- Content that makes someone stop scrolling in 0.5 seconds
+- Stories where the viewer thinks "I NEED to share this"
 
 WHAT SCORES LOW (1-5):
 - Generic corporate news, quarterly earnings, routine stock movements
@@ -242,19 +242,29 @@ WHAT SCORES LOW (1-5):
 - Topics too niche for a general audience
 - Any topic that does NOT have a clear emotional hook
 
-CRITICAL: A headline MUST contain at least one recognizable NAMED entity (person, company, brand) to score above 7.
+VIRAL FORMULA MATCH — Also identify which viral formula works best:
+- EXPOSÉ: Revealing hidden truth about well-known entity
+- IMPOSSIBLE_FACT: A fact so shocking it seems impossible
+- TIME_BOMB: Something happening NOW that affects everyone
+- CONSPIRACY: Real facts that imply something bigger
+- UNDERDOG: Against-all-odds success story
+- VS_BATTLE: Two sides, clear winner
+- MYTH_BUSTER: Destroying a common belief
+- COUNTDOWN: Multiple shocking reveals
+
+CRITICAL: A headline MUST contain at least one recognizable NAMED entity to score above 7.
 {used_context}
 
 HEADLINES TO SCORE:
 {chr(10).join(f'{i+1}. {h}' for i, h in enumerate(all_real_data))}
 
 Return ONLY a JSON array of objects. No markdown, no code fences.
-Format: [{{"headline": "exact headline text", "score": 8, "angle": "the viral angle in 10 words", "named_entity": "the main person/company mentioned"}}]
+Format: [{{"headline": "exact headline text", "score": 8, "angle": "the viral angle in 10 words", "named_entity": "the main person/company", "best_formula": "expose|impossible_fact|time_bomb|conspiracy|underdog|vs_battle|myth_buster|countdown", "emotional_hook": "the primary emotion this triggers"}}]
 
 Return ALL headlines with their scores. I will filter by score >= 8."""
 
     try:
-        print(f"  🔥 Running controversy scoring on {len(all_real_data)} headlines...")
+        print(f"  🔥 Running viral potential scoring on {len(all_real_data)} headlines...")
         response = model.generate_content(prompt)
         text = response.text.strip()
         if text.startswith("```"):
@@ -265,169 +275,282 @@ Return ALL headlines with their scores. I will filter by score >= 8."""
 
         scored = json.loads(text)
         if isinstance(scored, list):
-            # Filter for high-scoring headlines (8+ — strict threshold)
             hot_topics = [s for s in scored if isinstance(s, dict) and s.get("score", 0) >= 8]
             hot_topics.sort(key=lambda x: x.get("score", 0), reverse=True)
 
             if hot_topics:
-                # Take more than needed, then fact-check
                 candidates = hot_topics[:count * 2]
                 for p in candidates:
                     print(f"    🔥 [{p.get('score', '?')}/10] {p.get('headline', '?')[:60]}...")
-                    print(f"       Angle: {p.get('angle', 'N/A')} | Entity: {p.get('named_entity', 'N/A')}")
-                
-                # FACT-CHECK GATE — reject hallucinated topics
+                    print(f"       Formula: {p.get('best_formula', 'N/A')} | Emotion: {p.get('emotional_hook', 'N/A')}")
+
                 candidate_headlines = [p["headline"] for p in candidates]
                 verified = fact_check_topics(candidate_headlines, model)
                 print(f"    ✅ Fact-check passed: {len(verified)}/{len(candidate_headlines)}")
-                
-                if verified:
-                    return verified[:count]
 
-            # Fallback: lower threshold to 7 but still fact-check
-            print(f"  ⚠️  No headlines scored 8+, trying 7+ with fact-check...")
+                if verified:
+                    # Return with metadata for viral engine
+                    result_topics = []
+                    for headline in verified[:count]:
+                        metadata = next((s for s in candidates if s["headline"] == headline), {})
+                        result_topics.append({
+                            "headline": headline,
+                            "score": metadata.get("score", 8),
+                            "formula": metadata.get("best_formula", "expose"),
+                            "emotion": metadata.get("emotional_hook", "shock"),
+                            "entity": metadata.get("named_entity", ""),
+                            "angle": metadata.get("angle", ""),
+                        })
+                    return result_topics
+
+            # Fallback to 7+ threshold
+            print(f"  ⚠️  No headlines scored 8+, trying 7+...")
             ok_topics = [s for s in scored if isinstance(s, dict) and s.get("score", 0) >= 7]
             ok_topics.sort(key=lambda x: x.get("score", 0), reverse=True)
             if ok_topics:
                 candidate_headlines = [p["headline"] for p in ok_topics[:count * 2]]
                 verified = fact_check_topics(candidate_headlines, model)
                 if verified:
-                    return verified[:count]
+                    result_topics = []
+                    for headline in verified[:count]:
+                        metadata = next((s for s in ok_topics if s["headline"] == headline), {})
+                        result_topics.append({
+                            "headline": headline,
+                            "score": metadata.get("score", 7),
+                            "formula": metadata.get("best_formula", "expose"),
+                            "emotion": metadata.get("emotional_hook", "curiosity"),
+                            "entity": metadata.get("named_entity", ""),
+                            "angle": metadata.get("angle", ""),
+                        })
+                    return result_topics
 
-            # Last resort: top scored regardless
-            print(f"  ⚠️  No fact-checked topics available, picking top scored")
+            # Last resort
+            print(f"  ⚠️  No fact-checked topics, picking top scored")
             scored.sort(key=lambda x: x.get("score", 0), reverse=True)
             picked = scored[:count]
-            for p in picked:
-                print(f"    📊 [{p.get('score', '?')}/10] {p.get('headline', '?')[:60]}...")
-            return [p["headline"] for p in picked]
+            return [{"headline": p.get("headline", ""), "score": p.get("score", 5),
+                      "formula": p.get("best_formula", "expose"), "emotion": "curiosity",
+                      "entity": p.get("named_entity", ""), "angle": p.get("angle", "")}
+                     for p in picked]
     except Exception as e:
         print(f"  ⚠️  Controversy scoring failed: {e}")
 
-    # Fallback: just return raw headlines
-    return random.sample(all_real_data, min(count, len(all_real_data)))
+    # Fallback: raw headlines without metadata
+    sample = random.sample(all_real_data, min(count, len(all_real_data)))
+    return [{"headline": h, "score": 5, "formula": "expose", "emotion": "curiosity",
+             "entity": "", "angle": ""} for h in sample]
 
 
 def generate_scripts(niche: str, count: int, batch_id: str) -> list[dict]:
-    """Generate `count` scripts for the given niche. Returns list of script dicts."""
+    """Generate viral scripts powered by the Viral Intelligence Engine."""
     genai.configure(api_key=config.GEMINI_API_KEY)
     model = genai.GenerativeModel("gemini-2.5-flash")
 
     niche_cfg = config.NICHE_CONFIG[niche]
 
-    # Try to discover trending topics first
-    trending_topics = discover_trending_topics(niche, count)
-    if trending_topics:
-        topics = trending_topics
+    # Discover trending topics with viral metadata
+    trending_data = discover_trending_topics(niche, count)
+    if trending_data and isinstance(trending_data, list) and isinstance(trending_data[0], dict):
+        topics_with_meta = trending_data
+        trending_source = "real_time_trending"
+    elif trending_data and isinstance(trending_data, list):
+        topics_with_meta = [{"headline": t, "score": 5, "formula": "expose",
+                             "emotion": "curiosity", "entity": "", "angle": ""}
+                            for t in trending_data]
         trending_source = "real_time_trending"
     else:
-        # Fallback to curated pool
-        topics = random.sample(niche_cfg["topics_pool"], min(count, len(niche_cfg["topics_pool"])))
+        raw_topics = random.sample(niche_cfg["topics_pool"], min(count, len(niche_cfg["topics_pool"])))
+        topics_with_meta = [{"headline": t, "score": 5, "formula": "impossible_fact",
+                             "emotion": "amazement", "entity": "", "angle": ""}
+                            for t in raw_topics]
         trending_source = "curated_pool"
 
     today = datetime.now().strftime("%B %d, %Y")
-
-    # Build dedup context for the prompt
     used_titles = get_used_titles(limit=30)
     dedup_context = ""
     if used_titles:
-        dedup_context = f"\n\n🚫 ALREADY USED TITLES (DO NOT make videos about these same topics):\n" + chr(10).join(f'- {t}' for t in used_titles[-15:])
+        dedup_context = f"\n\n🚫 ALREADY USED TITLES (DO NOT repeat these):\n" + chr(10).join(f'- {t}' for t in used_titles[-15:])
 
-    # Select only 5-8 best hashtags per niche (over-tagging triggers suppression)
     niche_hashtags = niche_cfg['hashtags'][:6]
+
+    # Build per-headline viral context
+    headlines_with_context = []
+    for tm in topics_with_meta:
+        viral_ctx = build_viral_prompt_context(niche, tm["headline"])
+        formula = viral_ctx["formula"]
+        arc = viral_ctx["emotional_arc"]
+
+        headlines_with_context.append({
+            "headline": tm["headline"],
+            "recommended_formula": formula["name"],
+            "formula_key": formula["formula_key"],
+            "structure": formula["structure"],
+            "hook_templates": formula["hook_templates"][:2],
+            "emotional_arc": arc["description"],
+            "intensity_curve": arc["intensity_curve"],
+            "voice_modulation": arc.get("voice_modulation", []),
+            "named_entity": tm.get("entity", ""),
+            "viral_angle": tm.get("angle", ""),
+            "primary_emotion": tm.get("emotion", "shock"),
+        })
+
+    # Build the mega-prompt with viral intelligence
+    headlines_block = json.dumps(headlines_with_context, indent=2)
+
+    retention_guide = "\n".join([
+        f"  {ts}: {strat['goal']} — {strat['tactics'][0]}"
+        for ts, strat in RETENTION_STRATEGIES.items()
+    ])
+
+    engagement_comment_triggers = ", ".join(ENGAGEMENT_DRIVERS["comment_triggers"][:4])
+    engagement_share_triggers = ", ".join(ENGAGEMENT_DRIVERS["share_triggers"][:3])
+
+    title_formula_examples = "\n".join(f"  - {f}" for f in random.sample(TITLE_FORMULAS, 4))
+    power_adj = ", ".join(random.sample(POWER_ADJECTIVES, 6))
+    power_vrb = ", ".join(random.sample(POWER_VERBS, 6))
 
     prompt = f"""{niche_cfg['system_prompt']}
 
-Today is {today}. Generate exactly {count} YouTube Shorts scripts.
+Today is {today}. Generate exactly {count} YouTube Shorts scripts that are ENGINEERED to go viral.
 Return ONLY valid JSON — no markdown, no code fences.
 
-⚠️ ABSOLUTE RULE — DO NOT FABRICATE:
-- You are given REAL news headlines below. Your script MUST be about ONE of these REAL stories.
-- DO NOT invent events, people, companies, products, or scandals that don't exist.
-- DO NOT create fictional names like "Dr. Ishikawa" or fake products like "OmniCreator" or "Project Chimera".
-- If you are not 100% certain the event/person/company is REAL, do NOT write about it.
-- Your script should ONLY contain facts that actually happened. No speculation presented as fact.
+═══════════════════════════════════════════════
+VIRAL INTELLIGENCE BRIEFING (Study this carefully)
+═══════════════════════════════════════════════
+
+HEADLINES WITH VIRAL FORMULAS (use the recommended formula for each):
+{headlines_block}
+
+For each headline, a viral formula has been pre-selected. Follow its structure:
+- Each formula has a specific 5-part structure (see "structure" field)
+- Follow the emotional arc's intensity curve for pacing
+- Use the voice_modulation hints for tone shifts
+
+═══════════════════════════════════════════════
+RETENTION OPTIMIZATION (prevent viewer drop-off)
+═══════════════════════════════════════════════
+{retention_guide}
+
+═══════════════════════════════════════════════
+ENGAGEMENT ENGINEERING
+═══════════════════════════════════════════════
+COMMENT TRIGGERS to use: {engagement_comment_triggers}
+SHARE TRIGGERS to use: {engagement_share_triggers}
+The outro MUST use one of these comment trigger patterns:
+- DIVISIVE QUESTION: "Was {'{entity}'} justified, or did they go too far?"
+- HOT TAKE: Make a bold claim that forces agreement/disagreement
+- PREDICTION: "I think {'{X}'} will happen within {'{time}'}. Prove me wrong."
+
+═══════════════════════════════════════════════
+TITLE ENGINEERING (CTR is the #1 factor)
+═══════════════════════════════════════════════
+Title formulas that get high CTR:
+{title_formula_examples}
+
+Power adjectives: {power_adj}
+Power verbs: {power_vrb}
+- Title MUST contain a recognizable named entity from the headline
+- 50-70 characters, natural language, NOT ALL CAPS
+- The title should make someone think "I NEED to click this"
+
+═══════════════════════════════════════════════
+SCRIPT STRUCTURE (follow this EXACTLY)
+═══════════════════════════════════════════════
+
+PART 1 — THE HOOK (0-3 seconds, 10-15 words):
+- First word MUST be the most shocking element (name, number, superlative)
+- Create an information gap that's impossible to resist
+- The viewer should think "wait, WHAT?" within 1 second
+- NEVER start with: "So", "Did you know", "What if I told you", "In today's world"
+- Pattern interrupt examples: "Elon Musk just..." / "$47 billion..." / "Three scientists proved..."
+
+PART 2 — THE BUILD (3-20 seconds, 40-50 words):
+- Establish credibility with specific numbers, dates, names
+- Each sentence must add NEW information (no repetition)
+- Use short, punchy sentences (5-10 words each)
+- Voice should be measured, building tension
+
+PART 3 — THE REVELATION (20-40 seconds, 50-60 words):
+- The "holy shit" moment — the detail most people don't know
+- This is where the emotional peak hits
+- Use strategic pauses before the big reveal
+- Connect multiple pieces of evidence for maximum impact
+
+PART 4 — THE PERSONAL STAKE (40-50 seconds, 25-30 words):
+- Make it about the VIEWER directly
+- Use "you", "your", "everyone who..."
+- Show why this matters to THEIR life/money/future
+
+PART 5 — THE CLOSER (50-60 seconds, 10-15 words):
+- Divisive binary question that forces a side
+- Must be impossible to scroll past without having an opinion
+- NOT: "What do you think?" / "Type YES" / "Comment below"
+- YES: "Was this justified or pure corporate greed?" / "Is this the future, or the end?"
 {dedup_context}
 
-WHAT MAKES A SHORT GO VIRAL ON YOUTUBE (STUDY THESE PATTERNS):
-Our TOP performing videos and WHY they worked:
-1. "OpenAI's SHOCKING 'Sky' Voice Scandal EXPOSED" → 1,812 views (real scandal + named entity + active debate)
-2. "Hidden 5,000-Year-Old City Shocks Archaeologists" → 1,026 views (specific number + extreme claim + real discovery)
-3. "3 Insane Ways Cells Are Secretly Quantum Computers" → 937 views (number + mind-blowing science + curiosity gap)
-4. "3 INSANE Shedeur Sanders SECRETS" → 903 views (named athlete + secrets framing + sports drama)
-
-Our WORST performing videos (1-9 views) failed because:
-- Topics nobody was searching for (zero search volume)
-- No named person/company in the title
-- Generic or obscure topics without emotional stakes
-
-SEO-FIRST TITLE STRATEGY (THIS IS CRITICAL FOR YOUTUBE DISCOVERY):
-- Title MUST contain a recognizable NAMED entity (person, company, brand) from the headline
-- Format: "[Real Name] + [Shocking Verb] + [Specific Detail]"
-- Good: "Sam Altman's OpenAI Deal with Department of War Explained" (131 views - named entity + context)
-- Good: "Ryan Reynolds' Wrexham Vision: Shocking Global Impact" (273 views - celebrity + impact)
-- BAD: Generic titles without names → 1-9 views every time
-- Keep titles 50-70 chars, natural language, NOT ALL CAPS
-
-PATTERN INTERRUPT HOOK (CRITICAL — first 3 seconds decide everything):
-- The VERY FIRST WORD must be the most shocking element — a name, a number, or a superlative
-- Examples: "Elon Musk just..." / "$47 billion..." / "Three scientists just proved..."
-- NEVER start with setup phrases like "So" / "Did you know" / "What if I told you"
-- The hook must make someone STOP scrolling in 1 second
-
-HOW TO WRITE THE SCRIPT:
-1. HOOK (first 3 seconds): Start with the MOST SHOCKING word — a name, number, or superlative. No setup.
-2. CONTEXT (next 15 seconds): Who is involved? What exactly happened? Use real names, dates, numbers.
-3. THE REVEAL (next 20 seconds): The detail most people don't know. This is where you build outrage/amazement.
-4. WHY IT MATTERS (next 15 seconds): Make it personal — "This affects YOUR [money/privacy/future]".
-5. CLOSER (last 5 seconds): Pose a DIVISIVE question that forces a side: "Was this justified, or did they go too far?" / "Is this the future, or a disaster waiting to happen?" — NOT "What do you think?" or "Type YES."
+⚠️ ABSOLUTE RULES — VIOLATION = SCRIPT REJECTED:
+- DO NOT fabricate events, people, companies, or products
+- Script MUST be about ONE of the real headlines provided
+- Title MUST contain a real, recognizable named entity
+- Hook MUST start with the most shocking word
+- Outro MUST be a divisive binary-choice question
+- Total spoken words: 140-170 (equals 55-65 seconds)
+- NO fabricated statistics — only use real numbers you're certain about
+- Hashtags limited to 5-7 (over-tagging triggers YouTube suppression)
 
 Return a JSON array where each element has:
 {{
   "id": "S001",
-  "title": "SEO-searchable title with REAL named entity, 50-70 chars, natural language",
-  "hook": "first 3 sec, START with the most shocking word — a name or number. 10-15 words max.",
-  "body": "main content, 130-160 words. Based ONLY on real facts. Real names, dates, numbers. Short punchy sentences. Build to emotional climax. Make it personal to the viewer.",
-  "outro": "divisive binary question: 'Was X justified or did they go too far?' style. 10-15 words. Forces the viewer to pick a side.",
-  "description": "First line: main keyword phrase people would search (e.g. 'OpenAI Sky voice scandal explained'). Second line: 1-sentence summary. Third line: 'Follow for daily deep dives!' Then 5-7 relevant hashtags: #Shorts #[PersonName] {' '.join(niche_hashtags)}",
-  "tags": ["#Shorts", "#[PersonOrCompanyName]", "#[TopicKeyword]", "#[NicheTag]", "#Trending", "#Explained"] + {json.dumps(niche_hashtags)},
-  "pinned_comment": "a thoughtful, divisive question that sparks real debate in the comments",
-  "source_headline": "the exact RSS headline this script is based on",
+  "title": "SEO title with REAL named entity, 50-70 chars",
+  "hook": "first 3 sec hook, START with name/number/superlative, 10-15 words",
+  "body": "main content 130-160 words. Follow the viral formula structure. Real names, dates, numbers. Short punchy sentences. Build emotional arc per the intensity curve.",
+  "outro": "divisive binary question 10-15 words. Forces viewer to pick a side.",
+  "description": "First line: keyword phrase people search. Second line: 1-sentence summary. Third: 'Follow for daily deep dives!' Then 5-7 hashtags.",
+  "tags": ["#Shorts", "#[PersonOrCompanyName]", "#[NicheTag]", "#Trending"] + {json.dumps(niche_hashtags)},
+  "pinned_comment": "a thoughtful divisive question that sparks real debate",
+  "source_headline": "the exact RSS headline this is based on",
+  "viral_formula_used": "formula key from the briefing",
+  "primary_emotion": "the main emotion this script triggers",
+  "retention_hooks": [
+    {{"timestamp": "0-3s", "hook": "what keeps them watching at this point"}},
+    {{"timestamp": "15s", "hook": "mid-video retention hook"}},
+    {{"timestamp": "30s", "hook": "the revelation that prevents drop-off"}},
+    {{"timestamp": "45s", "hook": "the personal stake that drives to the end"}}
+  ],
   "visual_cues": [
-    {{"timestamp": "0-3s", "description": "dramatic photorealistic close-up of the named person or recognizable brand/location"}},
-    {{"timestamp": "3-20s", "description": "visual context: the setting, company HQ, or situation being discussed"}},
-    {{"timestamp": "20-40s", "description": "visual showing the key revelation — evidence, leaked document, shocking stat"}},
-    {{"timestamp": "40-55s", "description": "powerful conclusion — the aftermath, consequences, or viewer's future"}}
+    {{"timestamp": "0-1s", "description": "SCROLL STOPPER: extreme close-up or dramatic visual that stops the thumb", "motion": "fast_zoom_in"}},
+    {{"timestamp": "1-3s", "description": "HOOK VISUAL: reinforces the shocking opening statement", "motion": "slow_pan"}},
+    {{"timestamp": "3-15s", "description": "CONTEXT: setting, evidence, establishing shots — change every 3 seconds", "motion": "ken_burns"}},
+    {{"timestamp": "15-30s", "description": "REVELATION: the key evidence or proof, dramatically lit", "motion": "dramatic_zoom"}},
+    {{"timestamp": "30-45s", "description": "PERSONAL: viewer-focused, relatable imagery", "motion": "slow_zoom_out"}},
+    {{"timestamp": "45-60s", "description": "CLOSER: divisive visual, split-screen or binary choice", "motion": "static_dramatic"}}
   ],
   "veo3_prompts": [
-    "cinematic 9:16 dramatic close-up of [named entity], photorealistic, breaking-news energy, intense lighting",
-    "cinematic 9:16 wide shot of [relevant setting], photorealistic, dramatic atmosphere",
-    "cinematic 9:16 the key evidence or revelation, photorealistic, tense mood, sharp focus",
-    "cinematic 9:16 dramatic conclusion, photorealistic, powerful mood, emotional weight"
-  ]
+    "cinematic 9:16 [specific scene], photorealistic, dramatic lighting, 4K",
+    "cinematic 9:16 [specific scene], photorealistic, tense atmosphere",
+    "cinematic 9:16 [key evidence/revelation], photorealistic, sharp focus",
+    "cinematic 9:16 [dramatic conclusion], photorealistic, emotional weight"
+  ],
+  "caption_style": "tiktok_pop",
+  "voice_pacing": {{
+    "hook": "fast_intense",
+    "build": "measured_building",
+    "revelation": "dramatic_pause_then_punch",
+    "personal": "sincere_direct",
+    "closer": "emphatic_slow"
+  }}
 }}
 
-VERIFIED REAL HEADLINES to choose from (pick the most viral-worthy one):
-{chr(10).join(f'{i+1}. {t}' for i, t in enumerate(topics))}
+VERIFIED HEADLINES (use ONLY these):
+{chr(10).join(f'{i+1}. {tm["headline"]}' for i, tm in enumerate(topics_with_meta))}
 
-Visual style direction: {niche_cfg['visual_style']}
-
-CRITICAL RULES:
-- Total spoken words per script: 140-170 (equals 55-65 seconds)
-- Script MUST be about ONE of the real headlines above — do NOT invent a new topic
-- Title MUST contain a real, recognizable NAMED entity from the headline
-- The hook MUST start with the most shocking word (a name, number, or superlative)
-- The outro MUST be a divisive binary-choice question (not 'What do you think?')
-- NO fabricated names, events, or companies — only real ones from the headlines
-- Keep hashtags to 5-7 maximum (over-tagging triggers YouTube suppression)
-- Return ONLY the JSON array, nothing else
+Visual style: {niche_cfg['visual_style']}
 """
 
-    print(f"  ⏳ Calling Gemini for {count} viral scripts...")
+    print(f"  ⏳ Calling Gemini with Viral Intelligence Engine for {count} scripts...")
     response = model.generate_content(prompt)
     text = response.text.strip()
 
-    # Clean up common Gemini response issues
     if text.startswith("```"):
         text = text.split("\n", 1)[1]
     if text.endswith("```"):
@@ -436,43 +559,50 @@ CRITICAL RULES:
 
     scripts = json.loads(text)
 
-    # Ensure scripts is a list of dicts
     if isinstance(scripts, dict):
         scripts = [scripts]
-    # Filter out any non-dict entries (Gemini sometimes returns strings)
     scripts = [s for s in scripts if isinstance(s, dict)]
     if not scripts:
         raise ValueError("Gemini returned no valid script objects")
 
-    # Assign proper IDs and save individually
     results = []
     for i, script in enumerate(scripts):
         script["id"] = f"{batch_id}_{i+1:03d}"
         script["niche"] = niche
         script["channel"] = niche_cfg["channel_name"]
         script["generated_at"] = datetime.now().isoformat()
-        script["full_script"] = f"{script['hook']} {script['body']} {script['outro']}"
+        script["full_script"] = f"{script.get('hook', '')} {script.get('body', '')} {script.get('outro', '')}"
         script["trending_source"] = trending_source
 
-        # Word count validation
+        # Attach viral metadata
+        if i < len(topics_with_meta):
+            topic_meta = topics_with_meta[i]
+            script["topic_viral_score"] = topic_meta.get("score", 0)
+            script["recommended_formula"] = topic_meta.get("formula", "")
+            script["primary_emotion"] = topic_meta.get("emotion", script.get("primary_emotion", ""))
+
+        # Attach caption style from viral engine
+        formula_key = script.get("viral_formula_used", "expose")
+        script["caption_config"] = get_caption_style(formula_key)
+
         word_count = len(script["full_script"].split())
         script["word_count"] = word_count
         if word_count < 100 or word_count > 200:
             print(f"  ⚠️  Script {script['id']} has {word_count} words (target: 140-170)")
 
-        # Save individual script JSON
+        # Save script JSON
         out_path = config.SCRIPTS_DIR / f"{script['id']}.json"
         out_path.write_text(json.dumps(script, indent=2))
         results.append(script)
-        source_label = "🔥 LIVE trending" if trending_source == "real_time_trending" else "📋 curated"
-        print(f"  ✅ Script {script['id']}: \"{script['title']}\" ({word_count} words) [{source_label}]")
+        source_label = "🔥 LIVE" if trending_source == "real_time_trending" else "📋 curated"
+        formula_label = script.get("viral_formula_used", "auto")
+        print(f"  ✅ {script['id']}: \"{script['title']}\" ({word_count}w) [{source_label}] [Formula: {formula_label}]")
 
-        # Track topic in dedup history
         add_topic(
             title=script["title"],
             niche=niche,
             headline=script.get("source_headline", ""),
-            score=0,
+            score=script.get("topic_viral_score", 0),
         )
 
     return results
@@ -486,7 +616,7 @@ def main():
     parser.add_argument("--batch-id", default=datetime.now().strftime("B%Y%m%d"))
     args = parser.parse_args()
 
-    print(f"\n🎬 Stage 1: Generating {args.count} viral scripts for '{args.niche}' niche\n")
+    print(f"\n🎬 Stage 1: Generating {args.count} viral scripts for '{args.niche}'\n")
     scripts = generate_scripts(args.niche, args.count, args.batch_id)
     print(f"\n✅ Generated {len(scripts)} scripts → {config.SCRIPTS_DIR}/\n")
     return scripts
