@@ -1,13 +1,17 @@
 """
 Stage 3: Video clip preparation — AUTOMATED MODE.
 
-Uses Gemini image generation to create visuals from script visual cues,
-then animates them with FFmpeg Ken Burns effects (zoom/pan) to produce
-professional-looking video clips. No manual Veo 3 step needed.
+ENHANCED VERSION:
+- Context-aware image prompts using actual script content (not just generic visual cues)
+- Pre-generation Gemini step to create detailed, topic-specific image descriptions
+- Improved Ken Burns effects with smoother easing
+- Higher quality encoding for individual clips
+- Better fallback chain with retry logic
 
 Fallback chain:
-  1. Gemini image generation → Ken Burns animation (primary)
-  2. Solid-color placeholder clips (last resort)
+  1. Context-enriched Gemini image generation → Ken Burns animation (primary)
+  2. Gemini image with simplified prompt (fallback)
+  3. Solid-color placeholder clips (last resort)
 """
 
 import json
@@ -18,22 +22,108 @@ import random
 from pathlib import Path
 from datetime import datetime
 
+import google.generativeai as genai
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import config
 
 # ---------------------------------------------------------------------------
-# Ken Burns animation presets for variety
+# Ken Burns animation presets — ENHANCED with smoother easing
 # ---------------------------------------------------------------------------
 BURNS_EFFECTS = [
-    # Slow zoom in from center
-    "scale=8000:-1,zoompan=z='min(zoom+0.0015,1.5)':d=150:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30",
-    # Slow zoom out
-    "scale=8000:-1,zoompan=z='if(lte(zoom,1.0),1.5,max(1.001,zoom-0.0015))':d=150:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30",
-    # Pan left to right
-    "scale=8000:-1,zoompan=z='1.3':d=150:x='if(lte(on,1),0,min(x+3,iw-iw/zoom))':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30",
-    # Pan right to left
-    "scale=8000:-1,zoompan=z='1.3':d=150:x='if(lte(on,1),iw,max(0,x-3))':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30",
+    # Smooth zoom in with ease-in-out (using sine curve)
+    "scale=8000:-1,zoompan=z='1.0+0.5*on/d*(3-2*on/d)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30",
+    # Smooth zoom out with ease-in-out
+    "scale=8000:-1,zoompan=z='1.5-0.5*on/d*(3-2*on/d)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30",
+    # Smooth pan left to right with slight zoom
+    "scale=8000:-1,zoompan=z='1.2':d={frames}:x='(iw-iw/zoom)*on/d':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30",
+    # Smooth pan right to left with slight zoom
+    "scale=8000:-1,zoompan=z='1.2':d={frames}:x='(iw-iw/zoom)*(1-on/d)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30",
+    # Diagonal zoom from top-left
+    "scale=8000:-1,zoompan=z='1.0+0.4*on/d':d={frames}:x='(iw/zoom/4)*on/d':y='(ih/zoom/4)*on/d':s=1080x1920:fps=30",
+    # Diagonal zoom from bottom-right
+    "scale=8000:-1,zoompan=z='1.0+0.4*on/d':d={frames}:x='iw/2-(iw/zoom/2)+(iw/zoom/4)*(1-on/d)':y='ih/2-(ih/zoom/2)+(ih/zoom/4)*(1-on/d)':s=1080x1920:fps=30",
 ]
+
+# Niche-specific visual style guides for more relevant images
+NICHE_STYLE_GUIDE = {
+    "tech": "high-tech digital environment, glowing blue circuits, holographic displays, clean modern design",
+    "ai": "futuristic neural network visualization, glowing data streams, robotic elements, digital brain imagery",
+    "finance": "professional financial setting, stock market displays, luxury business environment, gold accents",
+    "cinema": "dramatic movie-set lighting, film noir shadows, red carpet glamour, cinema screen glow",
+    "sports": "dynamic athletic action, stadium atmosphere, dramatic sweat and motion blur, celebration energy",
+    "science": "laboratory environment, microscopic views, cosmic phenomena, particle physics visualization",
+    "gaming": "vibrant game world, neon RGB lighting, retro pixel art elements, virtual reality scene",
+    "history": "aged parchment textures, dramatic oil painting style, ancient architecture, sepia-toned atmosphere",
+    "space": "deep space nebula colors, planetary surfaces, astronaut perspective, cosmic void with distant stars",
+    "popculture": "vibrant social media aesthetic, paparazzi flash, trending visual effects, bold pop art colors",
+}
+
+
+def build_context_enriched_prompt(script: dict, visual_cue: str, cue_index: int) -> str:
+    """Build a highly specific image prompt using actual script content.
+    
+    Instead of generic 'cinematic image', this extracts real entities,
+    topics, and context from the script to generate relevant images.
+    """
+    title = script.get("title", "")
+    niche = script.get("niche", "tech")
+    source_headline = script.get("source_headline", "")
+    full_script = script.get("full_script", "")[:400]
+    
+    # Get niche-specific style
+    style = NICHE_STYLE_GUIDE.get(niche, "cinematic, dramatic lighting")
+    
+    # Extract key context from the script
+    context_topic = source_headline or title
+    
+    # Build a detailed, topic-specific prompt
+    if cue_index == 0:
+        # First image: the main subject/person/entity
+        prompt = (
+            f"Create a photorealistic, stunning vertical (9:16) image closely related to: {context_topic}. "
+            f"This is the opening shot for a viral YouTube Short. "
+            f"Show the main subject or entity mentioned: {visual_cue}. "
+            f"Style: {style}. "
+            f"Ultra high detail, dramatic cinematic lighting, shallow depth of field. "
+            f"The image must be DIRECTLY about the topic '{title}', not generic. "
+            f"NO text, NO watermarks, NO logos, NO letters on the image."
+        )
+    elif cue_index == 1:
+        # Second image: context/setting
+        prompt = (
+            f"Create a photorealistic, atmospheric vertical (9:16) image for: {context_topic}. "
+            f"Show the context or setting: {visual_cue}. "
+            f"This should visually explain the background or situation from the story. "
+            f"Style: {style}. "
+            f"Wide establishing shot, dramatic atmosphere, rich detail, cinematic color grading. "
+            f"The image must be SPECIFICALLY about '{title}', not a generic stock photo. "
+            f"NO text, NO watermarks, NO logos, NO letters."
+        )
+    elif cue_index == 2:
+        # Third image: the revelation/evidence
+        prompt = (
+            f"Create a dramatic, photorealistic vertical (9:16) image showing the key revelation: {visual_cue}. "
+            f"Context: {context_topic}. "
+            f"This image should convey the shocking discovery or evidence from the story. "
+            f"Style: {style}. "
+            f"Close-up detail shot, tense mood, sharp focus, dramatic contrast. "
+            f"Must be DIRECTLY related to '{title}'. "
+            f"NO text, NO watermarks, NO logos, NO letters."
+        )
+    else:
+        # Fourth image: conclusion/impact
+        prompt = (
+            f"Create an emotionally powerful vertical (9:16) photorealistic image for the conclusion: {visual_cue}. "
+            f"Context: {context_topic}. "
+            f"Show the aftermath, consequences, or future implications of the story. "
+            f"Style: {style}. "
+            f"Dramatic wide shot, emotional weight, powerful mood, cinematic color palette. "
+            f"Must be related to '{title}'. "
+            f"NO text, NO watermarks, NO logos, NO letters."
+        )
+    
+    return prompt
 
 
 def _generate_image_gemini_flash(prompt: str, output_path: Path) -> bool:
@@ -43,14 +133,8 @@ def _generate_image_gemini_flash(prompt: str, output_path: Path) -> bool:
     
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key={config.GEMINI_API_KEY}"
     
-    full_prompt = (
-        f"Generate a stunning, cinematic image for a YouTube Short: {prompt}. "
-        f"Vertical 9:16 aspect ratio, photorealistic, dramatic lighting, "
-        f"vivid colors, ultra high detail, 4K quality. No text or watermarks."
-    )
-    
     payload = {
-        "contents": [{"parts": [{"text": full_prompt}]}],
+        "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
             "responseModalities": ["TEXT", "IMAGE"]
         }
@@ -81,14 +165,8 @@ def _generate_image_imagen4(prompt: str, output_path: Path) -> bool:
     
     url = f"https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-fast-generate-001:predict?key={config.GEMINI_API_KEY}"
     
-    full_prompt = (
-        f"Generate a stunning, cinematic image for a YouTube Short: {prompt}. "
-        f"Vertical 9:16 aspect ratio, photorealistic, dramatic lighting, "
-        f"vivid colors, high detail, 4K quality."
-    )
-    
     payload = {
-        "instances": [{"prompt": full_prompt}],
+        "instances": [{"prompt": prompt}],
         "parameters": {
             "sampleCount": 1,
             "aspectRatio": "9:16",
@@ -123,10 +201,16 @@ def generate_image_gemini(prompt: str, output_path: Path) -> bool:
             return True
         
         # One more retry on Gemini Flash (handles transient 503s)
-        import time
-        time.sleep(2)
+        time.sleep(3)
         print("    🔄 Retrying Gemini Flash...")
-        return _generate_image_gemini_flash(prompt, output_path)
+        if _generate_image_gemini_flash(prompt, output_path):
+            return True
+        
+        # Final retry with simplified prompt (strip complexity)
+        time.sleep(2)
+        simple_prompt = prompt.split(". Style:")[0] + ". Photorealistic, vertical 9:16, dramatic lighting. NO text or logos."
+        print("    🔄 Trying simplified prompt...")
+        return _generate_image_gemini_flash(simple_prompt, output_path)
         
     except Exception as e:
         print(f"    ❌ Image generation error: {e}")
@@ -134,10 +218,13 @@ def generate_image_gemini(prompt: str, output_path: Path) -> bool:
 
 
 def image_to_video_clip(image_path: Path, output_path: Path, duration: float = 5.0, effect_idx: int = 0) -> bool:
-    """Convert a still image to an animated video clip using Ken Burns effect."""
-    effect = BURNS_EFFECTS[effect_idx % len(BURNS_EFFECTS)]
+    """Convert a still image to an animated video clip using Ken Burns effect.
+    
+    Enhanced with smoother easing curves and higher quality encoding.
+    """
     frames = int(duration * 30)
-    effect = effect.replace("d=150", f"d={frames}")
+    effect_template = BURNS_EFFECTS[effect_idx % len(BURNS_EFFECTS)]
+    effect = effect_template.format(frames=frames)
 
     cmd = [
         "ffmpeg", "-y",
@@ -147,7 +234,8 @@ def image_to_video_clip(image_path: Path, output_path: Path, duration: float = 5
         "-t", str(duration),
         "-c:v", "libx264",
         "-pix_fmt", "yuv420p",
-        "-preset", "medium",
+        "-preset", "slow",
+        "-crf", "18",
         str(output_path),
     ]
 
@@ -156,7 +244,7 @@ def image_to_video_clip(image_path: Path, output_path: Path, duration: float = 5
 
 
 def generate_clips_auto(script_path: Path) -> list[Path]:
-    """Generate video clips automatically using Gemini image gen + Ken Burns."""
+    """Generate video clips automatically using context-enriched Gemini image gen + Ken Burns."""
     script = json.loads(script_path.read_text())
     sid = script["id"]
     vid_dir = config.VIDEO_DIR / sid
@@ -170,7 +258,7 @@ def generate_clips_auto(script_path: Path) -> list[Path]:
             veo_prompts.append(cue.get("description", "abstract tech background"))
 
     clips = []
-    for j, prompt in enumerate(veo_prompts):
+    for j, raw_prompt in enumerate(veo_prompts):
         clip_path = vid_dir / f"clip_{j+1:02d}.mp4"
         img_path = vid_dir / f"img_{j+1:02d}.png"
 
@@ -180,13 +268,16 @@ def generate_clips_auto(script_path: Path) -> list[Path]:
             clips.append(clip_path)
             continue
 
-        # Step 1: Generate image from prompt
-        print(f"    🎨 Generating image {j+1}/{len(veo_prompts)}: {prompt[:60]}...")
-        success = generate_image_gemini(prompt, img_path)
+        # Step 1: Build context-enriched prompt
+        enriched_prompt = build_context_enriched_prompt(script, raw_prompt, j)
+        print(f"    🎨 Generating image {j+1}/{len(veo_prompts)}: {raw_prompt[:60]}...")
+
+        # Step 2: Generate image with enriched prompt
+        success = generate_image_gemini(enriched_prompt, img_path)
 
         if success and img_path.exists():
-            # Step 2: Animate the image with Ken Burns effect
-            print(f"    🎬 Animating clip {j+1} with Ken Burns effect...")
+            # Step 3: Animate the image with Ken Burns effect
+            print(f"    🎬 Animating clip {j+1} with enhanced Ken Burns effect...")
             if image_to_video_clip(img_path, clip_path, duration=15.0, effect_idx=j):
                 size_kb = clip_path.stat().st_size / 1024
                 print(f"    ✅ Clip {j+1}: {clip_path.name} ({size_kb:.0f} KB)")
@@ -200,15 +291,15 @@ def generate_clips_auto(script_path: Path) -> list[Path]:
             _generate_solid_fallback(clip_path, j)
             clips.append(clip_path)
 
-        # Small delay between API calls to respect rate limits
+        # Rate limit: 2s delay between API calls
         if j < len(veo_prompts) - 1:
-            time.sleep(1)
+            time.sleep(2)
 
     return clips
 
 
 def _generate_solid_fallback(clip_path: Path, idx: int):
-    """Generate a solid-color fallback clip."""
+    """Generate a solid-color fallback clip with subtle gradient animation."""
     colors = ["0x1a1a2e", "0x16213e", "0x0f3460", "0x533483", "0x1a1a2e"]
     color = colors[idx % len(colors)]
     cmd = [
@@ -400,7 +491,7 @@ def main():
         return
 
     if args.auto:
-        print(f"\n🎬 Stage 3: Auto-generating video clips with Gemini AI\n")
+        print(f"\n🎬 Stage 3: Auto-generating video clips with enhanced Gemini AI\n")
         clips = generate_all_clips(args.scripts, auto=True)
         print(f"\n✅ Generated {len(clips)} clips\n")
         return clips

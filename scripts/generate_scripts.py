@@ -375,11 +375,20 @@ PATTERN INTERRUPT HOOK (CRITICAL — first 3 seconds decide everything):
 - NEVER start with setup phrases like "So" / "Did you know" / "What if I told you"
 - The hook must make someone STOP scrolling in 1 second
 
+PACING & DELIVERY MARKERS (CRITICAL FOR ENGAGING VOICE):
+- Use SHORT sentences (5-12 words each). This creates a punchy, fast-paced feel.
+- After the hook, add [PAUSE 0.5] to create a dramatic beat before the context.
+- Before the key revelation, add [PAUSE 0.3] for anticipation.
+- Use [EMPHASIS] before the single most shocking sentence to slow it down for impact.
+- Use [SLOW] before statistics or numbers so the viewer can absorb them.
+- Do NOT overuse markers — max 3-4 per script. They should feel natural, not robotic.
+- Write like you're TALKING to someone, not reading an essay. Use contractions. Be direct.
+
 HOW TO WRITE THE SCRIPT:
 1. HOOK (first 3 seconds): Start with the MOST SHOCKING word — a name, number, or superlative. No setup.
-2. CONTEXT (next 15 seconds): Who is involved? What exactly happened? Use real names, dates, numbers.
-3. THE REVEAL (next 20 seconds): The detail most people don't know. This is where you build outrage/amazement.
-4. WHY IT MATTERS (next 15 seconds): Make it personal — "This affects YOUR [money/privacy/future]".
+2. CONTEXT (next 15 seconds): Who is involved? What exactly happened? Use real names, dates, numbers. SHORT sentences only.
+3. THE REVEAL (next 20 seconds): [PAUSE 0.3] before this section. The detail most people don't know. Build outrage/amazement.
+4. WHY IT MATTERS (next 15 seconds): Make it personal — "This affects YOUR [money/privacy/future]". [EMPHASIS] on the key line.
 5. CLOSER (last 5 seconds): Pose a DIVISIVE question that forces a side: "Was this justified, or did they go too far?" / "Is this the future, or a disaster waiting to happen?" — NOT "What do you think?" or "Type YES."
 
 Return a JSON array where each element has:
@@ -387,23 +396,23 @@ Return a JSON array where each element has:
   "id": "S001",
   "title": "SEO-searchable title with REAL named entity, 50-70 chars, natural language",
   "hook": "first 3 sec, START with the most shocking word — a name or number. 10-15 words max.",
-  "body": "main content, 130-160 words. Based ONLY on real facts. Real names, dates, numbers. Short punchy sentences. Build to emotional climax. Make it personal to the viewer.",
+  "body": "main content, 130-160 words. Based ONLY on real facts. Real names, dates, numbers. SHORT punchy sentences (5-12 words). Include [PAUSE 0.3] before the key revelation and [EMPHASIS] before the most shocking sentence. Build to emotional climax. Make it personal.",
   "outro": "divisive binary question: 'Was X justified or did they go too far?' style. 10-15 words. Forces the viewer to pick a side.",
   "description": "First line: main keyword phrase people would search (e.g. 'OpenAI Sky voice scandal explained'). Second line: 1-sentence summary. Third line: 'Follow for daily deep dives!' Then 5-7 relevant hashtags: #Shorts #[PersonName] {' '.join(niche_hashtags)}",
   "tags": ["#Shorts", "#[PersonOrCompanyName]", "#[TopicKeyword]", "#[NicheTag]", "#Trending", "#Explained"] + {json.dumps(niche_hashtags)},
   "pinned_comment": "a thoughtful, divisive question that sparks real debate in the comments",
   "source_headline": "the exact RSS headline this script is based on",
   "visual_cues": [
-    {{"timestamp": "0-3s", "description": "dramatic photorealistic close-up of the named person or recognizable brand/location"}},
-    {{"timestamp": "3-20s", "description": "visual context: the setting, company HQ, or situation being discussed"}},
-    {{"timestamp": "20-40s", "description": "visual showing the key revelation — evidence, leaked document, shocking stat"}},
-    {{"timestamp": "40-55s", "description": "powerful conclusion — the aftermath, consequences, or viewer's future"}}
+    {{"timestamp": "0-3s", "description": "SPECIFIC image: photorealistic [actual person name] at [actual real location/event]. Example: 'Elon Musk at Tesla factory, dramatic side lighting' NOT 'dramatic close-up of named entity'"}},
+    {{"timestamp": "3-20s", "description": "SPECIFIC image: the actual place/building/setting. Example: 'Pentagon building exterior, overcast sky, news vans outside' NOT 'relevant setting'"}},
+    {{"timestamp": "20-40s", "description": "SPECIFIC image: concrete visual of the revelation. Example: 'computer screen showing leaked financial data with red warning alerts' NOT 'key evidence'"}},
+    {{"timestamp": "40-55s", "description": "SPECIFIC image: the real-world consequence. Example: 'crowd of protesters outside Apple HQ with smartphones' NOT 'dramatic conclusion'"}}
   ],
   "veo3_prompts": [
-    "cinematic 9:16 dramatic close-up of [named entity], photorealistic, breaking-news energy, intense lighting",
-    "cinematic 9:16 wide shot of [relevant setting], photorealistic, dramatic atmosphere",
-    "cinematic 9:16 the key evidence or revelation, photorealistic, tense mood, sharp focus",
-    "cinematic 9:16 dramatic conclusion, photorealistic, powerful mood, emotional weight"
+    "photorealistic portrait of [ACTUAL PERSON NAME] in [SPECIFIC REAL SETTING], 9:16 vertical, dramatic cinematic lighting, editorial photography style. Example: 'photorealistic portrait of Tim Cook in Apple Park boardroom, dramatic side lighting, dark background'",
+    "photorealistic wide shot of [ACTUAL REAL LOCATION related to the story], 9:16 vertical, atmospheric, news photography style. Example: 'wide shot of Wall Street trading floor with screens showing red numbers, tense atmosphere'",
+    "photorealistic detail shot showing [CONCRETE VISUAL EVIDENCE from the story], 9:16 vertical, sharp focus, investigative photography style. Example: 'close-up of smartphone showing viral tweet with millions of views, dark moody lighting'",
+    "photorealistic scene of [REAL-WORLD IMPACT/CONSEQUENCE], 9:16 vertical, emotional weight, documentary photography style. Example: 'aerial view of massive data center at night, blue cooling towers glowing, industrial scale'"
   ]
 }}
 
@@ -413,13 +422,15 @@ VERIFIED REAL HEADLINES to choose from (pick the most viral-worthy one):
 Visual style direction: {niche_cfg['visual_style']}
 
 CRITICAL RULES:
-- Total spoken words per script: 140-170 (equals 55-65 seconds)
+- Total spoken words per script: 140-170 (equals 55-65 seconds). Pacing markers [PAUSE], [EMPHASIS], [SLOW] do NOT count as words.
 - Script MUST be about ONE of the real headlines above — do NOT invent a new topic
 - Title MUST contain a real, recognizable NAMED entity from the headline
 - The hook MUST start with the most shocking word (a name, number, or superlative)
 - The outro MUST be a divisive binary-choice question (not 'What do you think?')
 - NO fabricated names, events, or companies — only real ones from the headlines
+- Visual cues and veo3_prompts MUST use REAL specific names, locations, and objects — NOT placeholders like [named entity]
 - Keep hashtags to 5-7 maximum (over-tagging triggers YouTube suppression)
+- Use 3-4 pacing markers total: [PAUSE 0.3] before revelations, [EMPHASIS] on the key shocking line, [SLOW] before stats
 - Return ONLY the JSON array, nothing else
 """
 
@@ -454,8 +465,11 @@ CRITICAL RULES:
         script["full_script"] = f"{script['hook']} {script['body']} {script['outro']}"
         script["trending_source"] = trending_source
 
-        # Word count validation
-        word_count = len(script["full_script"].split())
+        # Word count validation — strip pacing markers before counting
+        import re as _re
+        clean_text = _re.sub(r'\[PAUSE\s+[\d.]+\]', '', script["full_script"])
+        clean_text = clean_text.replace('[EMPHASIS]', '').replace('[SLOW]', '')
+        word_count = len(clean_text.split())
         script["word_count"] = word_count
         if word_count < 100 or word_count > 200:
             print(f"  ⚠️  Script {script['id']} has {word_count} words (target: 140-170)")

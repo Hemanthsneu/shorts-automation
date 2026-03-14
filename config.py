@@ -30,7 +30,10 @@ SHORTS_PER_RUN = int(os.getenv("SHORTS_PER_RUN", "3"))
 
 # ── Voice ──
 VOICE_NAME = os.getenv("VOICE_NAME", "en-US-AndrewNeural")
-VOICE_RATE = os.getenv("VOICE_RATE", "+15%")
+VOICE_RATE = os.getenv("VOICE_RATE", "+20%")
+VOICE_PITCH = os.getenv("VOICE_PITCH", "+2Hz")
+INTER_SENTENCE_GAP_MS = int(os.getenv("INTER_SENTENCE_GAP_MS", "150"))
+WORDS_PER_CAPTION_GROUP = int(os.getenv("WORDS_PER_CAPTION_GROUP", "4"))
 BG_MUSIC_VOLUME = float(os.getenv("BACKGROUND_MUSIC_VOLUME", "0.12"))
 
 # ── Niche-Specific Voice Rotation ──
@@ -63,7 +66,9 @@ NICHE_CONFIG = {
         "system_prompt": """You are a viral YouTube Shorts scriptwriter specializing in technology.
 Your scripts make complex tech concepts feel mind-blowing in under 60 seconds.
 Tone: Confident, slightly edgy, like you're sharing a secret most people don't know.
-Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
+Style: Write like you're TALKING, not writing an essay. Use short punchy sentences (5-12 words). Use contractions.
+Never use: "In today's world", "Have you ever wondered", "Let's dive in".
+Use pacing markers: [PAUSE 0.3] before reveals, [EMPHASIS] on shocking facts, [SLOW] before key numbers.""",
         "topics_pool": [
             "How Netflix handles 250 million users without crashing",
             "Why deleting a file doesn't actually erase it from your computer",
@@ -94,7 +99,9 @@ Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
         "system_prompt": """You are a viral YouTube Shorts scriptwriter specializing in AI news and breakthroughs.
 Your scripts make AI developments feel exciting and slightly unsettling in under 60 seconds.
 Tone: Amazed but grounded, like a tech journalist breaking a story.
-Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
+Style: Write like you're TALKING, not writing an essay. Use short punchy sentences (5-12 words). Use contractions.
+Never use: "In today's world", "Have you ever wondered", "Let's dive in".
+Use pacing markers: [PAUSE 0.3] before reveals, [EMPHASIS] on shocking facts, [SLOW] before key numbers.""",
         "topics_pool": [
             "AI just generated a cinematic movie scene that looks like it cost $10 million",
             "An AI diagnosed cancer more accurately than a room of specialists",
@@ -125,7 +132,9 @@ Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
         "system_prompt": """You are a viral YouTube Shorts scriptwriter specializing in finance and money psychology.
 Your scripts make financial concepts feel urgent and personal in under 60 seconds.
 Tone: Direct, slightly provocative, like a smart friend giving you money advice.
-Never use: "In today's world", "Have you ever wondered", "Let's dive in".""",
+Style: Write like you're TALKING, not writing an essay. Use short punchy sentences (5-12 words). Use contractions.
+Never use: "In today's world", "Have you ever wondered", "Let's dive in".
+Use pacing markers: [PAUSE 0.3] before reveals, [EMPHASIS] on shocking facts, [SLOW] before key numbers.""",
         "topics_pool": [
             "Why stores price everything at $9.99 and how it tricks your brain",
             "The rule of 72 — the simplest trick to know when your money doubles",
