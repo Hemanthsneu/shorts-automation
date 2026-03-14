@@ -1,247 +1,115 @@
-# Shorts Factory
+# 🎬 Shorts Factory — Fully Automated Pipeline
 
-An automated pipeline that turns trending topics into YouTube Shorts. It generates scripts, voiceovers, visuals, and uploads — all from a single command.
-
-## How It Works
+## Architecture
 
 ```
-Trending Topics ──> Script Generation ──> Virality Gate ──> Voiceover ──> Video Clips ──> Assembly ──> Upload
-   (RSS + Trends)      (Gemini AI)        (score/improve)   (Edge TTS)    (Gemini/Veo)   (FFmpeg)    (YT API)
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌──────────────┐    ┌─────────────┐
+│  1. SCRIPT   │───▶│  2. VOICE   │───▶│  3. VIDEO   │───▶│  4. ASSEMBLE │───▶│  5. UPLOAD  │
+│  (Gemini)    │    │  (Edge TTS) │    │  (Veo 3 *)  │    │  (FFmpeg)    │    │  (YT API)   │
+└─────────────┘    └─────────────┘    └─────────────┘    └──────────────┘    └─────────────┘
+       │                  │                  │                   │                   │
+       ▼                  ▼                  ▼                   ▼                   ▼
+  scripts/*.json    audio/*.mp3       video/*.mp4        assembled/*.mp4     ✅ Published
 ```
 
-**Stage 1 — Scripts:** Pulls real headlines from Google Trends and RSS feeds. Gemini writes a 60-second script using a matched viral formula (exposé, countdown, myth-buster, etc.).
+**\* Veo 3 Note:** Veo 3 API is available via Vertex AI. If you prefer manual Veo 3 generation
+through the Gemini app, the pipeline supports a "semi-auto" mode — it generates all scripts
+and prompts, you paste prompts into Veo 3, drop clips into the folder, and automation handles
+the rest.
 
-**Stage 2 — Virality Gate:** Each script is scored across 12 dimensions (hook power, shareability, comment bait, etc.). Weak scripts are auto-improved or killed before wasting production time.
-
-**Stage 3 — Voiceover:** Edge TTS generates narration. Each video gets a unique voice, rate, and pitch so no two sound alike.
-
-**Stage 4 — Video Clips:** Gemini generates images from the script's visual cues, then FFmpeg animates them with Ken Burns effects. Alternatively, you can use Veo 3 prompts for higher quality.
-
-**Stage 5 — Assembly:** FFmpeg combines clips + voiceover + animated captions + sound effects + color grading + progress bar into a final 9:16 short.
-
-**Stage 6 — Upload:** Uploads to YouTube with SEO metadata, optimal timing, and a pinned engagement comment.
-
-**Stage 7 — Analytics:** Pulls view/engagement data from YouTube, identifies winning patterns, and feeds insights back into the content strategy.
-
-## Prerequisites
-
-- **Python 3.10+**
-- **FFmpeg** installed and on PATH
-- **Gemini API key** (free tier at [ai.google.dev](https://ai.google.dev))
-- **YouTube OAuth credentials** (for uploading)
-
-## Setup
-
-### 1. Clone the repo
+## Quick Start
 
 ```bash
-git clone https://github.com/Hemanthsneu/shorts-automation.git
-cd shorts-automation
-```
+# 1. Clone to your machine
+cp -r shorts-automation ~/shorts-automation
+cd ~/shorts-automation
 
-### 2. Install dependencies
-
-```bash
+# 2. Install dependencies
 pip install -r requirements.txt
-```
 
-Or use the setup script (macOS/Linux):
-
-```bash
-chmod +x setup.sh && ./setup.sh
-```
-
-### 3. Install FFmpeg
-
-**macOS:**
-```bash
-brew install ffmpeg
-```
-
-**Ubuntu/Debian:**
-```bash
-sudo apt-get install ffmpeg
-```
-
-**Windows:**
-Download from [ffmpeg.org](https://ffmpeg.org/download.html) and add to PATH.
-
-### 4. Configure environment
-
-```bash
+# 3. Set up config
 cp .env.example .env
-```
+# Edit .env with your API keys
 
-Open `.env` and set your Gemini API key:
-
-```
-GEMINI_API_KEY=your_key_here
-```
-
-### 5. Set up YouTube upload (optional)
-
-Skip this step if you only want to generate videos locally.
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project
-3. Enable **YouTube Data API v3**
-4. Go to **Credentials** → Create **OAuth 2.0 Client ID** (Desktop Application)
-5. Download the JSON and save it as `client_secret.json` in the project root
-6. Run the auth flow:
-
-```bash
+# 4. One-time YouTube OAuth setup
 python scripts/youtube_auth.py
+
+# 5. Run the full pipeline (content → YouTube in one go)
+python pipeline.py --count 5 --niche tech --fallback --auto-upload --privacy public --stagger 8
+
+# 6. Or use the one-click script (Windows)
+.\run_full_pipeline.ps1 -Niche tech -Count 2 -Upload -Stagger 8
+
+# 7. Daily automation: cron (Linux/Mac) or Task Scheduler (Windows)
+# Linux/Mac: crontab -e → 0 6 * * * cd ~/shorts-automation && python pipeline.py --count 2 --niche tech --fallback --auto-upload --privacy public --stagger 8
+# Windows: see docs/WINDOWS_SCHEDULER.md
 ```
 
-This opens a browser window for authorization and creates `token.json`.
+## Setup Guide
 
-## Usage
+### API Keys Needed
 
-### Full pipeline (one command)
+| Service | How to Get | Cost |
+|---------|-----------|------|
+| Gemini API | ai.google.dev → Get API Key (free tier: 60 RPM) | Free with your Ultra sub |
+| YouTube Data API | console.cloud.google.com → Enable YouTube Data API v3 | Free |
+| Edge TTS | No key needed — it's free and runs locally | Free |
 
-```bash
-python pipeline.py --count 3 --niche tech --fallback --auto-upload
-```
+### YouTube OAuth Setup (One-Time)
 
-This generates 3 tech shorts with AI-generated visuals and uploads them.
+1. Go to [Google Cloud Console](https://console.cloud.google.com/) — **use your PERSONAL Google account**
+2. Create new project: "Shorts Factory"
+3. Enable **YouTube Data API v3**
+4. Create OAuth 2.0 credentials (Desktop Application)
+5. Download `client_secret.json` → place in project root
+6. Run `python scripts/youtube_auth.py` → authorize in browser
+7. This creates `token.json` — pipeline uses this for uploads
 
-### Run without upload
+## End-to-end automation (content → YouTube)
 
-```bash
-python pipeline.py --count 2 --niche ai --fallback
-```
+The **full automation pipeline** runs all five stages in one go: script → voice → video (AI) → assemble → upload.
 
-Videos are saved to `output/assembled/`.
+| What you want | Command |
+|---------------|--------|
+| One-shot full run (recommended) | `python pipeline.py --count 2 --niche tech --fallback --auto-upload --privacy public --stagger 8` |
+| Windows one-click | `.\run_full_pipeline.ps1` or double-click `run_full_pipeline.bat` |
+| Upload as private first (review before public) | `python pipeline.py --count 2 --niche tech --fallback --auto-upload --privacy private` |
+| Daily on a schedule | **Windows:** [docs/WINDOWS_SCHEDULER.md](docs/WINDOWS_SCHEDULER.md) • **Linux/Mac:** cron (see COMMANDS.md) |
 
-### Run a single stage
+**Strategy and stages:** See [PIPELINE_STRATEGY.md](PIPELINE_STRATEGY.md) for the full strategy (what each stage does and how to run stages individually).
 
-```bash
-# Generate scripts only
-python pipeline.py --stage scripts --count 5 --niche tech
-
-# Score scripts for virality
-python pipeline.py --stage score
-
-# Generate voiceovers
-python pipeline.py --stage voice
-
-# Generate video clips
-python pipeline.py --stage video --fallback
-
-# Assemble final videos
-python pipeline.py --stage assemble
-
-# Upload to YouTube
-python pipeline.py --stage upload --privacy public
-```
-
-### Skip the virality gate
-
-```bash
-python pipeline.py --count 3 --niche tech --fallback --no-gate
-```
-
-### Check pipeline status
-
-```bash
-python pipeline.py --status
-```
-
-### View analytics
-
-```bash
-python pipeline.py --analytics
-```
-
-### Generate content calendar
-
-```bash
-python pipeline.py --calendar 7
-```
-
-## Available Niches
-
-`tech` `ai` `finance` `cinema` `sports` `science` `gaming` `history` `space` `popculture`
-
-## Configuration
-
-All settings are in `.env`. Key options:
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `GEMINI_API_KEY` | — | Required. Get from ai.google.dev |
-| `DEFAULT_NICHE` | `tech` | Default content niche |
-| `SHORTS_PER_RUN` | `3` | Videos per pipeline run |
-| `VIRALITY_GATE` | `true` | Score and filter scripts before production |
-| `VIRALITY_THRESHOLD` | `75` | Minimum score (0-100) to enter production |
-| `SOUND_DESIGN` | `true` | Add SFX and ambient audio |
-| `CAPTION_STYLE` | `tiktok_pop` | Caption style: `tiktok_pop`, `dramatic_reveal`, `news_ticker` |
-| `AUTO_UPLOAD` | `false` | Upload automatically after assembly |
-| `UPLOAD_PRIVACY` | `private` | YouTube privacy: `public`, `private`, `unlisted` |
-| `VEO_MODE` | `manual` | Video mode: `manual` (AI images) or `vertex` (Veo API) |
-
-See `.env.example` for the full list.
-
-## Project Structure
-
+### Folder Structure
 ```
 shorts-automation/
-├── pipeline.py                 # Main pipeline orchestrator
-├── config.py                   # Configuration
-├── .env.example                # Environment template
-├── requirements.txt            # Python dependencies
-├── setup.sh                    # Setup script (macOS/Linux)
-├── cron_run.sh                 # Cron automation script
+├── pipeline.py              # Main orchestrator
+├── config.py                # Configuration & settings
+├── PIPELINE_STRATEGY.md      # Full strategy: content → YouTube
+├── run_full_pipeline.ps1    # One-click full pipeline (Windows)
+├── run_full_pipeline.bat     # One-click full pipeline (Windows, double-click)
+├── .env                     # API keys (never commit)
+├── .env.example             # Template
+├── requirements.txt         # Python deps
+├── client_secret.json       # YouTube OAuth (you provide)
+├── token.json               # YouTube auth token (auto-generated)
+├── docs/
+│   └── WINDOWS_SCHEDULER.md # Schedule daily runs on Windows
 ├── scripts/
-│   ├── generate_scripts.py     # Stage 1: Script generation (Gemini)
-│   ├── virality_score.py       # Stage 2: Virality scoring gate
-│   ├── generate_voice.py       # Stage 3: Voiceover (Edge TTS)
-│   ├── generate_video.py       # Stage 4: Video clips (Gemini images)
-│   ├── assemble.py             # Stage 5: FFmpeg assembly
-│   ├── upload.py               # Stage 6: YouTube upload
-│   ├── analytics.py            # Stage 7: Performance analytics
-│   ├── viral_engine.py         # Viral psychology patterns and formulas
-│   ├── caption_engine.py       # Animated caption generation
-│   ├── sound_design.py         # SFX and audio mixing
-│   ├── channel_manager.py      # Multi-channel scheduling
-│   ├── content_log.py          # Content tracking
-│   ├── topic_history.py        # Topic deduplication
-│   └── youtube_auth.py         # YouTube OAuth setup
-├── .github/workflows/
-│   └── shorts_pipeline.yml     # GitHub Actions (4x daily)
-└── output/                     # Generated content (gitignored)
-    ├── scripts/                # Script JSON files
-    ├── audio/                  # Voiceover MP3 + SRT + ASS
-    ├── video/                  # Video clips per script
-    ├── assembled/              # Final shorts
-    ├── analytics/              # Performance data
-    └── sfx/                    # Generated sound effects
+│   ├── generate_scripts.py  # Stage 1: Gemini script generation
+│   ├── generate_voice.py    # Stage 2: Edge TTS voiceover
+│   ├── generate_video.py    # Stage 3: Veo 3 prompt generator + Vertex AI
+│   ├── assemble.py          # Stage 4: FFmpeg video assembly
+│   ├── upload.py            # Stage 5: YouTube upload
+│   └── youtube_auth.py      # One-time OAuth setup
+├── n8n/
+│   └── workflow.json        # n8n workflow (alternative to cron)
+├── output/
+│   ├── scripts/             # Generated scripts + metadata
+│   ├── audio/               # Voiceover MP3s
+│   ├── video/               # Veo 3 clips (manual or API)
+│   ├── assembled/           # Final shorts ready to upload
+│   └── logs/                # Pipeline run logs
+└── assets/
+    ├── fonts/               # Caption fonts
+    ├── music/               # Background music tracks
+    └── overlays/            # Subscribe buttons, logos
 ```
-
-## Automation
-
-### Cron (Linux/macOS)
-
-```bash
-crontab -e
-```
-
-Add lines to run at peak YouTube engagement hours:
-
-```
-0 6 * * * /path/to/shorts-automation/cron_run.sh >> /path/to/shorts-automation/output/cron.log 2>&1
-0 12 * * * /path/to/shorts-automation/cron_run.sh >> /path/to/shorts-automation/output/cron.log 2>&1
-0 18 * * * /path/to/shorts-automation/cron_run.sh >> /path/to/shorts-automation/output/cron.log 2>&1
-```
-
-### GitHub Actions
-
-The included workflow (`.github/workflows/shorts_pipeline.yml`) runs 4 times daily. Add these secrets to your repo:
-
-- `GEMINI_API_KEY`
-- `CLIENT_SECRET_JSON` (contents of `client_secret.json`)
-- `YOUTUBE_TOKEN_JSON` (contents of `token.json`)
-
-## License
-
-MIT

@@ -59,6 +59,22 @@ SCHEDULE_HOURS = int(os.getenv("SCHEDULE_HOURS_AHEAD", "2"))
 # ── Veo Mode ──
 VEO_MODE = os.getenv("VEO_MODE", "manual")
 
+# ── Virality Gate ──
+VIRALITY_GATE_ENABLED = os.getenv("VIRALITY_GATE_ENABLED", "false").lower() == "true"
+VIRALITY_THRESHOLD = int(os.getenv("VIRALITY_THRESHOLD", "75"))
+SCRIPTS_OVERGENERATE_FACTOR = float(os.getenv("SCRIPTS_OVERGENERATE_FACTOR", "2.0"))
+MAX_IMPROVEMENT_ROUNDS = int(os.getenv("MAX_IMPROVEMENT_ROUNDS", "2"))
+
+# ── Sound Design ──
+SOUND_DESIGN_ENABLED = os.getenv("SOUND_DESIGN_ENABLED", "false").lower() == "true"
+
+# ── Captions ──
+CAPTION_STYLE = os.getenv("CAPTION_STYLE", "bold_highlight")
+
+# ── Analytics ──
+ANALYTICS_ENABLED = os.getenv("ANALYTICS_ENABLED", "false").lower() == "true"
+ANALYTICS_PULL_ON_RUN = os.getenv("ANALYTICS_PULL_ON_RUN", "false").lower() == "true"
+
 # ── Niche Configs ──
 NICHE_CONFIG = {
     "tech": {
