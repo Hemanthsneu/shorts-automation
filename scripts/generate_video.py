@@ -31,18 +31,18 @@ import config
 # Ken Burns animation presets — ENHANCED with smoother easing
 # ---------------------------------------------------------------------------
 BURNS_EFFECTS = [
-    # Slow zoom in (centered)
+    # Slow zoom in (centered) — PROVEN
     "scale=8000:-1,zoompan=z='min(zoom+0.0015,1.5)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30",
-    # Slow zoom out
+    # Slow zoom out (centered) — PROVEN
     "scale=8000:-1,zoompan=z='if(eq(on,1),1.5,max(zoom-0.0015,1.0))':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30",
-    # Pan left to right with slight zoom
-    "scale=8000:-1,zoompan=z='1.2':d={frames}:x='(iw-iw/zoom)*on/d':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30",
-    # Pan right to left with slight zoom
-    "scale=8000:-1,zoompan=z='1.2':d={frames}:x='(iw-iw/zoom)*(1-on/d)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30",
-    # Zoom in on top-left
-    "scale=8000:-1,zoompan=z='min(zoom+0.0012,1.4)':d={frames}:x='(iw/zoom/4)*on/d':y='(ih/zoom/4)*on/d':s=1080x1920:fps=30",
-    # Zoom in on bottom-right
-    "scale=8000:-1,zoompan=z='min(zoom+0.0012,1.4)':d={frames}:x='iw/2-(iw/zoom/4)':y='ih/2-(ih/zoom/4)':s=1080x1920:fps=30",
+    # Medium zoom in (centered)
+    "scale=8000:-1,zoompan=z='min(zoom+0.001,1.3)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30",
+    # Faster zoom in (centered)
+    "scale=8000:-1,zoompan=z='min(zoom+0.002,1.6)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30",
+    # Zoom in on upper area
+    "scale=8000:-1,zoompan=z='min(zoom+0.0012,1.4)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/4-(ih/zoom/4)':s=1080x1920:fps=30",
+    # Zoom in on lower area
+    "scale=8000:-1,zoompan=z='min(zoom+0.0012,1.4)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/3)':s=1080x1920:fps=30",
 ]
 
 # Niche-specific visual style guides for more relevant images
@@ -258,6 +258,8 @@ def image_to_video_clip(image_path: Path, output_path: Path, duration: float = 5
     ]
 
     result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"    ⚠️  FFmpeg error: {result.stderr[-200:] if result.stderr else 'unknown'}")
     return result.returncode == 0
 
 
