@@ -126,6 +126,50 @@ def build_context_enriched_prompt(script: dict, visual_cue: str, cue_index: int)
     return prompt
 
 
+def sanitize_prompt_for_safety(prompt: str) -> str:
+    """Strip real person/celebrity names from prompts for safety-filtered APIs.
+    
+    Google's image gen APIs block prompts containing real people's names.
+    This replaces identifiable names with generic descriptions.
+    """
+    import re
+    
+    # Common name patterns to strip (proper nouns that look like person names)
+    # Match 2-3 capitalized words in a row (likely a person name)
+    sanitized = re.sub(
+        r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2}\b",
+        lambda m: _name_to_generic(m.group()),
+        prompt
+    )
+    
+    # Also strip possessive forms like "Kylie Jenner's"
+    sanitized = re.sub(
+        r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2}'s\b",
+        "a person's",
+        sanitized
+    )
+    
+    # Clean up double spaces
+    sanitized = re.sub(r'\s+', ' ', sanitized)
+    
+    return sanitized
+
+
+def _name_to_generic(name: str) -> str:
+    """Replace a detected name with a suitable generic description."""
+    name_lower = name.lower()
+    # Keep non-person proper nouns (companies, places, products)
+    tech_terms = ['apple', 'google', 'microsoft', 'tesla', 'samsung', 'chrome', 'iphone',
+                  'pentagon', 'white house', 'wall street', 'silicon valley', 'youtube',
+                  'tiktok', 'instagram', 'twitter', 'facebook', 'netflix', 'amazon',
+                  'new york', 'los angeles', 'united states', 'north korea']
+    for term in tech_terms:
+        if term in name_lower:
+            return name  # Keep it — it's a place/company, not a person
+    
+    return "a person"
+
+
 def _generate_image_gemini_flash(prompt: str, output_path: Path) -> bool:
     """Primary: Use Gemini 2.0 Flash for image generation."""
     import requests
@@ -207,7 +251,7 @@ def _generate_image_imagen4(prompt: str, output_path: Path) -> bool:
 
 
 def generate_image_gemini(prompt: str, output_path: Path) -> bool:
-    """Generate image using dual-engine: Gemini Flash (primary) → Imagen 4 (fallback)."""
+    """Generate image using dual-engine with safety fallback for celebrity names."""
     try:
         # Try Gemini 2.0 Flash first (better compositional understanding)
         if _generate_image_gemini_flash(prompt, output_path):
@@ -224,11 +268,25 @@ def generate_image_gemini(prompt: str, output_path: Path) -> bool:
         if _generate_image_gemini_flash(prompt, output_path):
             return True
         
-        # Final retry with simplified prompt (strip complexity)
+        # Safety fallback: strip person names (Google blocks celebrity names)
         time.sleep(2)
-        simple_prompt = prompt.split(". Style:")[0] + ". Photorealistic, vertical 9:16, dramatic lighting. NO text or logos."
-        print("    🔄 Trying simplified prompt...")
-        return _generate_image_gemini_flash(simple_prompt, output_path)
+        safe_prompt = sanitize_prompt_for_safety(prompt)
+        if safe_prompt != prompt:
+            print("    🔄 Trying name-safe prompt (stripped celebrity names)...")
+            if _generate_image_imagen4(safe_prompt, output_path):
+                return True
+            if _generate_image_gemini_flash(safe_prompt, output_path):
+                return True
+        
+        # Last resort: fully generic prompt
+        time.sleep(2)
+        generic_prompt = (
+            "Dramatic photorealistic vertical 9:16 image, cinematic lighting, "
+            "moody atmosphere, vivid colors, editorial photography style. "
+            "NO text, NO watermarks, NO logos, NO letters."
+        )
+        print("    🔄 Trying generic fallback prompt...")
+        return _generate_image_imagen4(generic_prompt, output_path)
         
     except Exception as e:
         print(f"    ❌ Image generation error: {e}")
