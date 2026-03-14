@@ -115,6 +115,7 @@ async def generate_sentence_audio(
         pitch=effective_pitch,
     )
     
+    submaker = edge_tts.SubMaker()
     audio_bytes = io.BytesIO()
     word_events = []
     
@@ -122,10 +123,11 @@ async def generate_sentence_audio(
         if chunk["type"] == "audio":
             audio_bytes.write(chunk["data"])
         elif chunk["type"] == "WordBoundary":
+            submaker.feed(chunk)
             word_events.append({
-                "text": chunk["text"] if "text" in chunk else "",
-                "offset": chunk["offset"] if "offset" in chunk else 0,
-                "duration": chunk["duration"] if "duration" in chunk else 0,
+                "text": chunk.get("text", ""),
+                "offset": chunk.get("offset", 0),
+                "duration": chunk.get("duration", 0),
             })
     
     audio_bytes.seek(0)
@@ -221,7 +223,6 @@ async def generate_voice(script_path: Path) -> Path:
     print(f"    📝 Split into {len(sentences)} sentences for precise gap control")
 
     # Generate audio for each sentence
-    gap_silence = AudioSegment.silent(duration=config.INTER_SENTENCE_GAP_MS)
     combined_audio = AudioSegment.empty()
     all_word_events = []
     current_offset_ms = 0
@@ -242,17 +243,33 @@ async def generate_voice(script_path: Path) -> Path:
         )
         
         # Adjust word timing to absolute position in the combined audio
-        for we in word_events:
-            # Edge TTS offsets are in 100-nanosecond units (ticks)
-            word_offset_ms = we["offset"] // 10_000 if we["offset"] > 1000 else we["offset"]
-            word_duration_ms = we["duration"] // 10_000 if we["duration"] > 1000 else we["duration"]
-            
-            all_word_events.append({
-                "text": we["text"],
-                "abs_offset_ms": current_offset_ms + word_offset_ms,
-                "duration_ms": max(word_duration_ms, 100),  # minimum 100ms per word
-                "sentence_idx": idx,
-            })
+        if word_events:
+            for we in word_events:
+                # Edge TTS offsets are in 100-nanosecond units (ticks)
+                raw_offset = we["offset"]
+                raw_duration = we["duration"]
+                word_offset_ms = raw_offset // 10_000 if raw_offset > 10_000 else raw_offset
+                word_duration_ms = raw_duration // 10_000 if raw_duration > 10_000 else raw_duration
+                
+                all_word_events.append({
+                    "text": we["text"],
+                    "abs_offset_ms": current_offset_ms + word_offset_ms,
+                    "duration_ms": max(word_duration_ms, 100),
+                    "sentence_idx": idx,
+                })
+        else:
+            # Fallback: estimate word timing from audio duration
+            words = clean_sentence.split()
+            if words:
+                segment_ms = len(segment)
+                ms_per_word = segment_ms / len(words)
+                for w_idx, word in enumerate(words):
+                    all_word_events.append({
+                        "text": word,
+                        "abs_offset_ms": current_offset_ms + int(w_idx * ms_per_word),
+                        "duration_ms": max(int(ms_per_word * 0.9), 100),
+                        "sentence_idx": idx,
+                    })
         
         # Append audio segment
         combined_audio += segment

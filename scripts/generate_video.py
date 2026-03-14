@@ -31,18 +31,18 @@ import config
 # Ken Burns animation presets — ENHANCED with smoother easing
 # ---------------------------------------------------------------------------
 BURNS_EFFECTS = [
-    # Smooth zoom in with ease-in-out (using sine curve)
-    "scale=8000:-1,zoompan=z='1.0+0.5*on/d*(3-2*on/d)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30",
-    # Smooth zoom out with ease-in-out
-    "scale=8000:-1,zoompan=z='1.5-0.5*on/d*(3-2*on/d)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30",
-    # Smooth pan left to right with slight zoom
+    # Slow zoom in (centered)
+    "scale=8000:-1,zoompan=z='min(zoom+0.0015,1.5)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30",
+    # Slow zoom out
+    "scale=8000:-1,zoompan=z='if(eq(on,1),1.5,max(zoom-0.0015,1.0))':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30",
+    # Pan left to right with slight zoom
     "scale=8000:-1,zoompan=z='1.2':d={frames}:x='(iw-iw/zoom)*on/d':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30",
-    # Smooth pan right to left with slight zoom
+    # Pan right to left with slight zoom
     "scale=8000:-1,zoompan=z='1.2':d={frames}:x='(iw-iw/zoom)*(1-on/d)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30",
-    # Diagonal zoom from top-left
-    "scale=8000:-1,zoompan=z='1.0+0.4*on/d':d={frames}:x='(iw/zoom/4)*on/d':y='(ih/zoom/4)*on/d':s=1080x1920:fps=30",
-    # Diagonal zoom from bottom-right
-    "scale=8000:-1,zoompan=z='1.0+0.4*on/d':d={frames}:x='iw/2-(iw/zoom/2)+(iw/zoom/4)*(1-on/d)':y='ih/2-(ih/zoom/2)+(ih/zoom/4)*(1-on/d)':s=1080x1920:fps=30",
+    # Zoom in on top-left
+    "scale=8000:-1,zoompan=z='min(zoom+0.0012,1.4)':d={frames}:x='(iw/zoom/4)*on/d':y='(ih/zoom/4)*on/d':s=1080x1920:fps=30",
+    # Zoom in on bottom-right
+    "scale=8000:-1,zoompan=z='min(zoom+0.0012,1.4)':d={frames}:x='iw/2-(iw/zoom/4)':y='ih/2-(ih/zoom/4)':s=1080x1920:fps=30",
 ]
 
 # Niche-specific visual style guides for more relevant images
@@ -127,64 +127,82 @@ def build_context_enriched_prompt(script: dict, visual_cue: str, cue_index: int)
 
 
 def _generate_image_gemini_flash(prompt: str, output_path: Path) -> bool:
-    """Primary: Use Gemini 2.0 Flash for image generation (best compositional quality)."""
+    """Primary: Use Gemini 2.0 Flash for image generation."""
     import requests
     import base64
     
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key={config.GEMINI_API_KEY}"
+    # Try multiple model names (API changes frequently)
+    model_names = [
+        "gemini-2.0-flash-preview-image-generation",
+        "gemini-2.0-flash-exp-image-generation",
+    ]
     
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "responseModalities": ["TEXT", "IMAGE"]
+    for model in model_names:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={config.GEMINI_API_KEY}"
+        
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "responseModalities": ["TEXT", "IMAGE"]
+            }
         }
-    }
-    
-    response = requests.post(url, json=payload, headers={"Content-Type": "application/json"})
-    if response.status_code == 200:
-        data = response.json()
-        candidates = data.get("candidates", [])
-        if candidates:
-            parts = candidates[0].get("content", {}).get("parts", [])
-            for p in parts:
-                if "inlineData" in p:
-                    img_data = p["inlineData"].get("data", "")
-                    if img_data:
-                        with open(output_path, "wb") as f:
-                            f.write(base64.b64decode(img_data))
-                        return True
-    elif response.status_code != 503:
-        print(f"    ⚠️  Gemini Flash: {response.status_code}")
+        
+        response = requests.post(url, json=payload, headers={"Content-Type": "application/json"})
+        if response.status_code == 200:
+            data = response.json()
+            candidates = data.get("candidates", [])
+            if candidates:
+                parts = candidates[0].get("content", {}).get("parts", [])
+                for p in parts:
+                    if "inlineData" in p:
+                        img_data = p["inlineData"].get("data", "")
+                        if img_data:
+                            with open(output_path, "wb") as f:
+                                f.write(base64.b64decode(img_data))
+                            return True
+        elif response.status_code == 404:
+            continue  # Try next model name
+        elif response.status_code != 503:
+            print(f"    ⚠️  Gemini Flash ({model}): {response.status_code}")
     return False
 
 
 def _generate_image_imagen4(prompt: str, output_path: Path) -> bool:
-    """Fallback: Use Imagen 4.0 Fast for image generation."""
+    """Fallback: Use Imagen for image generation."""
     import requests
     import base64
     
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-fast-generate-001:predict?key={config.GEMINI_API_KEY}"
+    # Try Imagen 4 Fast first, then Imagen 3
+    models = [
+        "imagen-4.0-fast-generate-001",
+        "imagen-3.0-generate-002",
+    ]
     
-    payload = {
-        "instances": [{"prompt": prompt}],
-        "parameters": {
-            "sampleCount": 1,
-            "aspectRatio": "9:16",
-            "outputOptions": {"mimeType": "image/jpeg"}
+    for model in models:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:predict?key={config.GEMINI_API_KEY}"
+        
+        payload = {
+            "instances": [{"prompt": prompt}],
+            "parameters": {
+                "sampleCount": 1,
+                "aspectRatio": "9:16",
+                "outputOptions": {"mimeType": "image/png"}
+            }
         }
-    }
-    
-    response = requests.post(url, json=payload, headers={"Content-Type": "application/json"})
-    if response.status_code == 200:
-        data = response.json()
-        if "predictions" in data and len(data["predictions"]) > 0:
-            b64_image = data["predictions"][0].get("bytesBase64Encoded")
-            if b64_image:
-                with open(output_path, "wb") as f:
-                    f.write(base64.b64decode(b64_image))
-                return True
-    else:
-        print(f"    ⚠️  Imagen 4: {response.status_code}")
+        
+        response = requests.post(url, json=payload, headers={"Content-Type": "application/json"})
+        if response.status_code == 200:
+            data = response.json()
+            if "predictions" in data and len(data["predictions"]) > 0:
+                b64_image = data["predictions"][0].get("bytesBase64Encoded")
+                if b64_image:
+                    with open(output_path, "wb") as f:
+                        f.write(base64.b64decode(b64_image))
+                    return True
+        elif response.status_code == 404:
+            continue
+        else:
+            print(f"    ⚠️  {model}: {response.status_code}")
     return False
 
 
